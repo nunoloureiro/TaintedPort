@@ -58,7 +58,7 @@ sudo docker rm taintedport 2>/dev/null || true
 sudo docker run -d \
     --name taintedport \
     --restart unless-stopped \
-    -p 80:80 \
+    -p 127.0.0.1:8080:80 \
     taintedport:latest
 
 # --- Set up weekly reset cron job (Monday 00:00 UTC) ---
@@ -66,18 +66,19 @@ echo "[4/4] Setting up weekly reset (Monday 00:00 UTC)..."
 CRON_CMD="0 0 * * 1 docker restart taintedport >> /var/log/taintedport-reset.log 2>&1"
 (sudo crontab -l 2>/dev/null | grep -v "taintedport"; echo "$CRON_CMD") | sudo crontab -
 
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo 'YOUR_IP')
+# --- Install nginx host config ---
+echo "[5] Installing nginx virtual host config..."
+sudo cp docker/nginx-host-taintedport.conf /etc/nginx/sites-available/taintedport.com
+sudo ln -sf /etc/nginx/sites-available/taintedport.com /etc/nginx/sites-enabled/taintedport.com
+sudo nginx -t && sudo systemctl reload nginx
 
 echo ""
 echo "============================================"
 echo "  TaintedPort is running!"
-echo "  IP: $PUBLIC_IP"
+echo "  Container: 127.0.0.1:8080"
+echo "  Host nginx: taintedport.com + api.taintedport.com -> container"
 echo "  Weekly reset: Monday 00:00 UTC"
 echo "============================================"
-echo ""
-echo "DNS setup (point these to $PUBLIC_IP):"
-echo "  taintedport.com      -> A record -> $PUBLIC_IP"
-echo "  api.taintedport.com  -> A record -> $PUBLIC_IP"
 echo ""
 echo "Useful commands:"
 echo "  docker logs taintedport        # View logs"
