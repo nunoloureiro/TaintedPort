@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  taintedport:
+    build:
+      context: .
+      args:
+        # For local Docker: use path-based routing via nginx
+        API_URL: /api
+    container_name: taintedport
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
