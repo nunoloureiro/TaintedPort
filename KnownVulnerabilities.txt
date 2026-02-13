@@ -178,7 +178,9 @@ BUSINESS LOGIC VULNERABILITIES
 NOTES FOR TESTERS
 =================
 
-- Default credentials: joe@example.com / password123
+- Default credentials:
+    joe@example.com / password123 (user id: 1, has 2 pre-seeded orders)
+    jane@example.com / password123 (user id: 2, has 3 pre-seeded orders)
 - The database resets weekly (Monday 00:00 UTC) or on container restart.
 - JWT secret is: pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI (also visible via directory listing)
 - The frontend is at https://taintedport.com
