@@ -921,9 +921,9 @@ This application is intentionally vulnerable for DAST/security testing purposes.
 5. **Stored XSS on user name (account page)**: The user's name is stored without sanitization and displayed in the Navbar via `dangerouslySetInnerHTML` (e.g., `Hi, <name>`). Change name on the account page to inject.
 6. **Stored XSS on shipping name (checkout/order detail)**: The shipping name entered at checkout is stored and displayed on the order detail page (`/orders/:id`) via `dangerouslySetInnerHTML`.
 
-### JWT Vulnerabilities
-7. **JWT "none" algorithm accepted**: The JWT decoder accepts tokens with `alg: "none"` and skips signature verification entirely, allowing token forgery.
-8. **JWT signature not verified**: Even for HS256 tokens, the signature validation only logs a warning on mismatch but accepts the token anyway.
+### JWT / Broken Authentication (API2:2023)
+7. **JWT "none" algorithm accepted** (API2:2023 Broken Authentication): The JWT decoder accepts tokens with `alg: "none"` and skips signature verification entirely, allowing token forgery.
+8. **JWT signature not verified** (API2:2023 Broken Authentication): Even for HS256 tokens, the signature validation only logs a warning on mismatch but accepts the token anyway.
 
 ### Server Misconfiguration
 9. **Directory listing**: Nginx serves `/files/` with `autoindex on`, exposing the backend source code and database file at both `taintedport.com/files/` and `api.taintedport.com/files/`.

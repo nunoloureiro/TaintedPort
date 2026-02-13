@@ -11,8 +11,8 @@
 4  Reflected XSS                   GET /wines?search= (search query)   CWE-79      Medium
 5  Stored XSS                      PUT /auth/profile (name field)      CWE-79      Medium
 6  Stored XSS                      POST /orders (shipping name)        CWE-79      Medium
-7  JWT "none" Algorithm Accepted   Authorization header (any endpoint) CWE-345     High
-8  JWT Signature Not Verified      Authorization header (any endpoint) CWE-347     High
+7  JWT "none" Algorithm (API2)     Authorization header (any endpoint) CWE-345     High
+8  JWT Signature Bypass (API2)    Authorization header (any endpoint) CWE-347     High
 9  Directory Listing               /files/ (both hosts)                CWE-548     Medium
 10 CSRF                            POST /orders (checkout)             CWE-352     Medium
 
@@ -77,7 +77,9 @@ DETAILED DESCRIPTIONS
    have the XSS payload executed.
    Example: name = <script>alert('XSS')</script>
 
-7. JWT "none" Algorithm Accepted
+7. JWT "none" Algorithm Accepted (Broken Authentication)
+   CWE: CWE-345 (Insufficient Verification of Data Authenticity)
+   OWASP API: API2:2023 Broken Authentication
    Endpoint: Any authenticated endpoint
    Header: Authorization: Bearer <token>
    File: backend/api/config/jwt.php -> decode()
@@ -87,7 +89,9 @@ DETAILED DESCRIPTIONS
    by setting alg=none and providing arbitrary payload data.
    Example: Header={"alg":"none","typ":"JWT"}, Payload={"user_id":1,"email":"admin@example.com","exp":9999999999}
 
-8. JWT Signature Not Verified
+8. JWT Signature Not Verified (Broken Authentication)
+   CWE: CWE-347 (Improper Verification of Cryptographic Signature)
+   OWASP API: API2:2023 Broken Authentication
    Endpoint: Any authenticated endpoint
    Header: Authorization: Bearer <token>
    File: backend/api/config/jwt.php -> decode()
