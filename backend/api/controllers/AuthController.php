@@ -35,8 +35,10 @@ class AuthController {
             return ['success' => false, 'message' => 'Email already registered.'];
         }
 
-        $userId = $this->user->create($data['name'], $data['email'], $data['password']);
-        $token = JWT::encode(['user_id' => $userId, 'email' => $data['email']]);
+        // VULN: Mass Assignment / Privilege Escalation - is_admin from request body is passed through
+        $isAdmin = isset($data['is_admin']) ? $data['is_admin'] : 0;
+        $userId = $this->user->create($data['name'], $data['email'], $data['password'], $isAdmin);
+        $token = JWT::encode(['user_id' => $userId, 'email' => $data['email'], 'is_admin' => (bool)$isAdmin]);
 
         http_response_code(201);
         return [
@@ -46,7 +48,8 @@ class AuthController {
             'user' => [
                 'id' => $userId,
                 'name' => $data['name'],
-                'email' => $data['email']
+                'email' => $data['email'],
+                'is_admin' => (bool)$isAdmin
             ]
         ];
     }
@@ -86,7 +89,10 @@ class AuthController {
             }
         }
 
-        $token = JWT::encode(['user_id' => $user['id'], 'email' => $user['email']]);
+        // VULN: is_admin claim included in JWT - combined with JWT none/signature bypass,
+        // allows privilege escalation by forging a token with is_admin=true
+        $isAdmin = !empty($user['is_admin']) && $user['is_admin'] == 1;
+        $token = JWT::encode(['user_id' => $user['id'], 'email' => $user['email'], 'is_admin' => $isAdmin]);
 
         return [
             'success' => true,
@@ -94,7 +100,8 @@ class AuthController {
             'user' => [
                 'id' => $user['id'],
                 'name' => $user['name'],
-                'email' => $user['email']
+                'email' => $user['email'],
+                'is_admin' => $isAdmin
             ]
         ];
     }
@@ -106,8 +113,9 @@ class AuthController {
             return ['success' => false, 'message' => 'User not found.'];
         }
 
-        // Convert totp_enabled to boolean
+        // Convert totp_enabled and is_admin to boolean
         $user['totp_enabled'] = !empty($user['totp_enabled']) && $user['totp_enabled'] == 1;
+        $user['is_admin'] = !empty($user['is_admin']) && $user['is_admin'] == 1;
 
         return [
             'success' => true,

@@ -56,4 +56,11 @@ export const orderAPI = {
   getById: (id) => api.get(`/orders/${id}`),
 };
 
+// Admin API
+export const adminAPI = {
+  getOrders: () => api.get('/admin/orders'),
+  getOrder: (id) => api.get(`/admin/orders/${id}`),
+  updateOrderStatus: (id, status) => api.put(`/admin/orders/${id}/status`, { status }),
+};
+
 export default api;

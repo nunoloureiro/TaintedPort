@@ -71,4 +71,47 @@ class OrderController {
 
         return ['success' => true, 'order' => $order];
     }
+
+    /**
+     * VULN: BFLA - Broken Function Level Authorization.
+     * This endpoint allows ANY authenticated user to change an order's status
+     * if they pass is_admin=true in the request body. The authorization check
+     * trusts client-supplied data instead of verifying the actual user role.
+     */
+    public function updateStatus($authUser, $orderId) {
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // VULN: Checks is_admin from request body instead of user's actual role
+        if (empty($data['is_admin'])) {
+            http_response_code(403);
+            return ['success' => false, 'message' => 'Admin access required.'];
+        }
+
+        if (empty($data['status'])) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'Status is required.'];
+        }
+
+        $validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+        if (!in_array($data['status'], $validStatuses)) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'Invalid status. Must be one of: ' . implode(', ', $validStatuses)];
+        }
+
+        $db = Database::getInstance();
+        $stmt = $db->prepare('UPDATE orders SET status = :status WHERE id = :id');
+        $stmt->bindValue(':status', $data['status'], SQLITE3_TEXT);
+        $stmt->bindValue(':id', intval($orderId), SQLITE3_INTEGER);
+        $stmt->execute();
+
+        if ($db->changes() === 0) {
+            http_response_code(404);
+            return ['success' => false, 'message' => 'Order not found.'];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Order status updated to ' . $data['status'] . '.'
+        ];
+    }
 }

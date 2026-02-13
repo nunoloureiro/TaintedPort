@@ -22,6 +22,7 @@ require_once __DIR__ . '/controllers/AuthController.php';
 require_once __DIR__ . '/controllers/WineController.php';
 require_once __DIR__ . '/controllers/CartController.php';
 require_once __DIR__ . '/controllers/OrderController.php';
+require_once __DIR__ . '/controllers/AdminController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -141,6 +142,28 @@ try {
         $authUser = authenticateToken();
         $ctrl = new OrderController();
         $response = $ctrl->show($authUser, $matches[1]);
+    }
+    // VULN: BFLA - order status update trusts is_admin from request body
+    elseif (preg_match('#^/orders/(\d+)/status$#', $path, $matches) && $method === 'PUT') {
+        $authUser = authenticateToken();
+        $ctrl = new OrderController();
+        $response = $ctrl->updateStatus($authUser, $matches[1]);
+    }
+    // Admin routes (protected - admin only)
+    elseif ($path === '/admin/orders' && $method === 'GET') {
+        $authUser = authenticateToken();
+        $ctrl = new AdminController();
+        $response = $ctrl->listOrders($authUser);
+    }
+    elseif (preg_match('#^/admin/orders/(\d+)$#', $path, $matches) && $method === 'GET') {
+        $authUser = authenticateToken();
+        $ctrl = new AdminController();
+        $response = $ctrl->getOrder($authUser, $matches[1]);
+    }
+    elseif (preg_match('#^/admin/orders/(\d+)/status$#', $path, $matches) && $method === 'PUT') {
+        $authUser = authenticateToken();
+        $ctrl = new AdminController();
+        $response = $ctrl->updateOrderStatus($authUser, $matches[1]);
     }
     else {
         http_response_code(404);

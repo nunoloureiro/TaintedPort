@@ -82,8 +82,16 @@ class Order {
 
     public function getById($orderId, $userId) {
         // VULN: BOLA - user_id is not checked, any authenticated user can view any order
+        // VULN: BOPLA (Excessive Data Exposure) - JOINs with users table and exposes
+        // sensitive properties: password_hash, totp_secret, is_admin, email
         $stmt = $this->db->prepare(
-            'SELECT * FROM orders WHERE id = :id'
+            'SELECT o.*, u.name as owner_name, u.email as owner_email,
+                    u.password_hash as owner_password_hash,
+                    u.totp_secret as owner_totp_secret,
+                    u.is_admin as owner_is_admin
+             FROM orders o
+             JOIN users u ON o.user_id = u.id
+             WHERE o.id = :id'
         );
         $stmt->bindValue(':id', $orderId, SQLITE3_INTEGER);
         $result = $stmt->execute();

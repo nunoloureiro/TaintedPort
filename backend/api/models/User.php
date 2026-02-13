@@ -9,14 +9,19 @@ class User {
         $this->db = Database::getInstance();
     }
 
-    public function create($name, $email, $password) {
+    /**
+     * VULN: Mass Assignment / Privilege Escalation - accepts optional is_admin parameter.
+     * An attacker can register with is_admin=1 to create an admin account.
+     */
+    public function create($name, $email, $password, $isAdmin = 0) {
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $stmt = $this->db->prepare(
-            'INSERT INTO users (name, email, password_hash) VALUES (:name, :email, :hash)'
+            'INSERT INTO users (name, email, password_hash, is_admin) VALUES (:name, :email, :hash, :is_admin)'
         );
         $stmt->bindValue(':name', $name, SQLITE3_TEXT);
         $stmt->bindValue(':email', $email, SQLITE3_TEXT);
         $stmt->bindValue(':hash', $hash, SQLITE3_TEXT);
+        $stmt->bindValue(':is_admin', intval($isAdmin), SQLITE3_INTEGER);
         $stmt->execute();
 
         return $this->db->lastInsertRowID();
@@ -40,7 +45,7 @@ class User {
     }
 
     public function findById($id) {
-        $stmt = $this->db->prepare('SELECT id, name, email, totp_enabled, created_at FROM users WHERE id = :id');
+        $stmt = $this->db->prepare('SELECT id, name, email, is_admin, totp_enabled, created_at FROM users WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         $result = $stmt->execute();
         return $result->fetchArray(SQLITE3_ASSOC);

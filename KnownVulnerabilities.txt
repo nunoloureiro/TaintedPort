@@ -127,6 +127,10 @@ BUSINESS LOGIC VULNERABILITIES
 13 Price Manipulation              POST /cart/add (price param)            CWE-472     High
 14 Broken Access Control on 2FA    POST /auth/2fa/disable (user_id param)  CWE-639     High
 15 Discount Code Bypass            POST /orders (discount_code/percent)    CWE-472     High
+16 Privilege Escalation (Register) POST /auth/register (is_admin param)    CWE-915     Critical
+17 Privilege Escalation (JWT)      /admin/* (JWT claim forgery chain)      CWE-269     Critical
+18 BOPLA (Data Exposure)           GET /orders/:id (leaks user secrets)    CWE-213     High
+19 BFLA (Order Status)             PUT /orders/:id/status (is_admin body)  CWE-285     High
 
 
 11. BOLA (IDOR) on Order Details
@@ -175,12 +179,68 @@ BUSINESS LOGIC VULNERABILITIES
     even negative values for credit.
 
 
+16. Privilege Escalation via Mass Assignment on Registration
+    CWE: CWE-915 (Improperly Controlled Modification of Dynamically-Determined Object Attributes)
+    Severity: CRITICAL
+    Endpoint: POST /auth/register
+    Parameter: is_admin (JSON body)
+    File: backend/api/controllers/AuthController.php -> register()
+    File: backend/api/models/User.php -> create()
+    Description: The registration endpoint accepts an optional is_admin field
+    in the request body. If is_admin=1 is sent, the new account is created
+    with admin privileges. The frontend signup form does not include this field,
+    but an attacker can add it via an intercepting proxy or curl.
+
+17. Privilege Escalation via JWT Claim Forgery (Vulnerability Chain)
+    CWE: CWE-269 (Improper Privilege Management), CWE-345 (Insufficient Verification of Data Authenticity)
+    Severity: CRITICAL
+    Endpoint: All /admin/* endpoints
+    File: backend/api/controllers/AdminController.php -> requireAdmin()
+    File: backend/api/config/jwt.php -> decode()
+    Description: The admin authorization check reads the is_admin flag from
+    the JWT token payload instead of the database. Combined with the existing
+    JWT vulnerabilities (#7 "none" algorithm or #8 signature bypass), an
+    attacker can forge a JWT token with is_admin=true to gain admin access.
+    Steps: (1) Login as any user → get a JWT token, (2) Decode the JWT
+    payload, (3) Modify is_admin to true, (4) Re-encode with alg=none or
+    any signature, (5) Use the forged token to access /admin/* endpoints.
+
+
+18. BOPLA - Excessive Data Exposure on Order Details
+    CWE: CWE-213 (Exposure of Sensitive Information Due to Incompatible Policies)
+    OWASP API: API3:2023 Broken Object Property Level Authorization
+    Severity: HIGH
+    Endpoint: GET /orders/:id
+    File: backend/api/models/Order.php -> getById()
+    Description: The order detail endpoint JOINs with the users table and
+    returns sensitive user properties in the response: password_hash,
+    totp_secret (2FA seed), is_admin flag, and email of the order owner.
+    Combined with the existing BOLA (#11), any authenticated user can
+    retrieve any order and get the order owner's hashed password and
+    2FA secret, enabling offline password cracking and 2FA bypass.
+
+19. BFLA - Broken Function Level Authorization on Order Status Update
+    CWE: CWE-285 (Improper Authorization)
+    OWASP API: API5:2023 Broken Function Level Authorization
+    Severity: HIGH
+    Endpoint: PUT /orders/:id/status
+    Parameter: is_admin (JSON body, set to true)
+    File: backend/api/controllers/OrderController.php -> updateStatus()
+    Description: There is a separate (non-admin) endpoint for updating
+    order status. Instead of verifying the user's actual role from the
+    database or JWT, it checks if is_admin=true was passed in the
+    request body. Any authenticated user can change any order's status
+    (pending, processing, shipped, delivered, cancelled) by simply
+    including "is_admin": true in their request.
+
+
 NOTES FOR TESTERS
 =================
 
 - Default credentials:
     joe@example.com / password123 (user id: 1, has 2 pre-seeded orders)
     jane@example.com / password123 (user id: 2, has 3 pre-seeded orders)
+    admin@example.com / password123 (user id: 3, admin role, access to /admin)
 - The database resets weekly (Monday 00:00 UTC) or on container restart.
 - JWT secret is: pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI (also visible via directory listing)
 - The frontend is at https://taintedport.com

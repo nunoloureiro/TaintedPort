@@ -49,12 +49,13 @@ App available at `http://localhost:8080`. The `docker-compose.yml` builds with `
 
 ## Demo Accounts
 
-| User | Email | Password |
-|------|-------|----------|
-| Joe Silva | joe@example.com | password123 |
-| Jane Doe | jane@example.com | password123 |
+| User | Email | Password | Role |
+|------|-------|----------|------|
+| Joe Silva | joe@example.com | password123 | User |
+| Jane Doe | jane@example.com | password123 | User |
+| Admin | admin@example.com | password123 | Admin |
 
-Both users have pre-seeded orders for testing BOLA/IDOR vulnerabilities.
+Joe and Jane have pre-seeded orders for testing BOLA/IDOR vulnerabilities. The admin account has access to `/admin` for order management.
 
 ## Local Development (without Docker)
 
@@ -191,6 +192,13 @@ docker run -p 8080:80 nunoloureiro/taintedport:latest
 | GET | `/api/orders` | List user's orders |
 | GET | `/api/orders/:id` | Get order details |
 
+### Admin (requires admin role)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/orders` | List all orders |
+| GET | `/api/admin/orders/:id` | Get order details (admin view) |
+| PUT | `/api/admin/orders/:id/status` | Update order status |
+
 ## Features
 
 - JWT-based authentication with 7-day token expiry
@@ -202,6 +210,7 @@ docker run -p 8080:80 nunoloureiro/taintedport:latest
 - Checkout with shipping address and payment on delivery
 - User account with order history and security settings
 - 24 seeded Portuguese wines from 7+ regions
+- Admin dashboard for order management (status updates)
 - About page with disclaimers
 - Global footer on every page
 - Auto-reset database on container start

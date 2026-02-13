@@ -31,6 +31,13 @@ Create a modern, fully functional Portuguese wine e-commerce store with the foll
 - For local Docker development, path-based routing (`/api`) is used as a fallback
 - The frontend API base URL is a build-time variable (`API_URL`): defaults to `https://api.taintedport.com` for production, `/api` for local Docker
 
+### OpenAPI Specification
+- Generate an OpenAPI 3.0 spec (`openapi.yaml`) at the project root documenting all API endpoints, request/response schemas, authentication, and query parameters.
+- The spec should include all endpoints from the API router (`backend/api/index.php`): auth, wines, cart, and orders.
+- Serve the spec at `https://api.taintedport.com/openapi.yaml` via nginx.
+- Include both production (`https://api.taintedport.com`) and local (`http://localhost:8080/api`) servers.
+- Copy the spec into the Docker image (`COPY openapi.yaml /var/www/backend/openapi.yaml`).
+
 ### Database
 - **Type**: SQLite
 - **Schema**: See database design section below
@@ -197,6 +204,28 @@ Base the design on the **Snyk Labs** website (https://labs.snyk.io/try-now/) wit
   - **Disable flow:** requires password confirmation
 - Order history (list of past orders)
 - Logout button
+
+### 8. Admin Dashboard (`/admin`)
+- **Access:** Only visible and accessible to admin users (`is_admin = 1` in the users table)
+- **Navbar:** Shows a yellow "Admin" link in the navbar when the logged-in user is an admin
+- **Summary cards:** Status breakdown (pending, processing, shipped, delivered, cancelled) with color-coded count cards
+- **Orders table** with columns:
+  - Order ID (clickable to expand/collapse order details inline)
+  - Customer name and email
+  - Items count
+  - Total amount
+  - Order date
+  - Status badge (color-coded)
+  - Status dropdown to change status (pending → processing → shipped → delivered / cancelled)
+- **Expanded order detail** shows shipping info and item breakdown
+- **Default admin user:** `admin@example.com` / `password123` (pre-seeded with `is_admin = 1`)
+
+### Default Users (Pre-seeded)
+| User | Email | Password | Role | Pre-seeded Orders |
+|------|-------|----------|------|-------------------|
+| Joe Silva | joe@example.com | password123 | User | 2 orders (#1, #2) |
+| Jane Doe | jane@example.com | password123 | User | 3 orders (#3, #4, #5) |
+| Admin | admin@example.com | password123 | Admin | None |
 
 ## API Endpoints
 
@@ -546,6 +575,52 @@ Disables 2FA. Requires password confirmation.
 }
 ```
 
+### Admin Endpoints (requires admin role)
+
+#### `GET /api/admin/orders`
+**Headers:** `Authorization: Bearer <token>` (admin user)
+**Response (200):**
+```json
+{
+  "success": true,
+  "orders": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "user_name": "Joe Silva",
+      "user_email": "joe@example.com",
+      "total": 455.00,
+      "status": "pending",
+      "shipping_name": "Joe Silva",
+      "shipping_city": "Lisbon",
+      "order_date": "2026-01-15T10:30:00Z",
+      "items_count": 3
+    }
+  ]
+}
+```
+
+#### `GET /api/admin/orders/:id`
+**Headers:** `Authorization: Bearer <token>` (admin user)
+Returns full order details including shipping info, items, and customer info.
+
+#### `PUT /api/admin/orders/:id/status`
+**Headers:** `Authorization: Bearer <token>` (admin user)
+**Request Body:**
+```json
+{
+  "status": "shipped"
+}
+```
+Valid statuses: `pending`, `processing`, `shipped`, `delivered`, `cancelled`.
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Order status updated to shipped."
+}
+```
+
 ## Database Schema
 
 ### Table: `users`
@@ -555,6 +630,7 @@ CREATE TABLE users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 0,
     totp_secret TEXT DEFAULT NULL,
     totp_enabled INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -825,7 +901,7 @@ sqlite3 database.db
 - Wine ratings and reviews
 - Wishlist functionality
 - Email confirmation on order placement
-- Admin panel for managing wines
+- Admin panel for managing wines (CRUD operations on wines catalog)
 - Stock inventory tracking
 - Discount codes/promotions
 - Wine recommendations based on preferences
@@ -861,6 +937,10 @@ This application is intentionally vulnerable for DAST/security testing purposes.
 13. **Price manipulation on cart**: The `POST /cart/add` endpoint accepts an optional `price` field that overrides the wine's price in the database.
 14. **Broken access control on 2FA disable**: The `POST /auth/2fa/disable` endpoint accepts an optional `user_id` field. If present, it disables 2FA for that user instead of the authenticated user.
 15. **Discount code bypass**: The `POST /orders` endpoint accepts `discount_code` and `discount_percent` fields. Any non-empty code is accepted and the percent is applied without validation (100 = free, >100 = negative total).
+16. **Privilege Escalation via Mass Assignment on Registration**: The `POST /auth/register` endpoint accepts an optional `is_admin` field. If `is_admin=1` is sent, the new account is created with admin privileges. The `User::create()` method blindly passes this field to the INSERT query.
+17. **Privilege Escalation via JWT Claim Forgery (Chain)**: The `AdminController::requireAdmin()` checks the `is_admin` flag from the JWT token payload instead of the database. Combined with vulnerability #7 (JWT "none" algorithm) or #8 (signature bypass), an attacker can forge a JWT with `is_admin=true` to gain admin access. The JWT `encode()` method includes `is_admin` in the token payload on login, making the claim visible and exploitable.
+18. **BOPLA - Excessive Data Exposure on Order Details** (API3:2023): The `GET /orders/:id` endpoint JOINs with the users table and returns the order owner's `password_hash`, `totp_secret`, `is_admin`, and `email` in the response. Combined with BOLA (#11), any authenticated user can harvest credentials and 2FA secrets for all users by enumerating order IDs.
+19. **BFLA - Broken Function Level Authorization on Order Status** (API5:2023): A separate `PUT /orders/:id/status` endpoint allows any authenticated user to change order status by passing `is_admin: true` in the request body. The endpoint trusts the client-supplied `is_admin` flag instead of verifying the user's actual role.
 
 ### Implementation Notes
 - The **login page frontend** should render the server error message as-is (it already does via React state, and the backend includes unsanitized user input in the error). The email input should be `type="text"` (not `type="email"`) to allow HTML injection from the browser.

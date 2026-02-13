@@ -19,6 +19,7 @@ CREATE TABLE users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 0,
     totp_secret TEXT DEFAULT NULL,
     totp_enabled INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -317,6 +318,14 @@ $stmt->bindValue(':hash', $demoHash, SQLITE3_TEXT);
 $stmt->execute();
 $janeId = $db->lastInsertRowID();
 
+// Create admin user
+$stmt2 = $db->prepare('INSERT INTO users (name, email, password_hash, is_admin) VALUES (:name, :email, :hash, 1)');
+$stmt2->bindValue(':name', 'Admin', SQLITE3_TEXT);
+$stmt2->bindValue(':email', 'admin@example.com', SQLITE3_TEXT);
+$stmt2->bindValue(':hash', $demoHash, SQLITE3_TEXT);
+$stmt2->execute();
+$adminId = $db->lastInsertRowID();
+
 // Seed orders for Joe (user 1)
 $db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
 VALUES ($joeId, 465.00, 'delivered', 'Joe Silva', 'Rua das Flores 42', 'Lisboa', '1200-195', '+351 912 345 678', 'Ring the doorbell twice')");
@@ -363,6 +372,7 @@ echo "- Created 5 tables\n";
 echo "- Seeded " . count($wines) . " wines\n";
 echo "- Created demo user: joe@example.com / password123 (id: $joeId)\n";
 echo "- Created demo user: jane@example.com / password123 (id: $janeId)\n";
+echo "- Created admin user: admin@example.com / password123 (id: $adminId)\n";
 echo "- Created 2 orders for Joe, 3 orders for Jane\n";
 
 $db->close();

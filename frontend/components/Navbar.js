@@ -46,6 +46,11 @@ export default function Navbar() {
                 <Link href="/account" className="text-zinc-400 hover:text-white transition-colors">
                   Account
                 </Link>
+                {user.is_admin && (
+                  <Link href="/admin" className="text-yellow-400 hover:text-yellow-300 transition-colors">
+                    Admin
+                  </Link>
+                )}
                 <button
                   onClick={logout}
                   className="text-zinc-400 hover:text-white transition-colors"
@@ -103,6 +108,11 @@ export default function Navbar() {
                 <Link href="/account" className="block px-3 py-2 text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>
                   Account
                 </Link>
+                {user.is_admin && (
+                  <Link href="/admin" className="block px-3 py-2 text-yellow-400 hover:text-yellow-300" onClick={() => setMobileOpen(false)}>
+                    Admin
+                  </Link>
+                )}
                 <button onClick={() => { logout(); setMobileOpen(false); }} className="block px-3 py-2 text-zinc-400 hover:text-white">
                   Logout
                 </button>

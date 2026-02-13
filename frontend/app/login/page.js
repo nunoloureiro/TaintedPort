@@ -163,7 +163,7 @@ export default function LoginPage() {
 
               <div className="mt-6 pt-6 border-t border-dark-border">
                 <p className="text-center text-zinc-500 text-xs">
-                  Demo accounts: joe@example.com / jane@example.com (password: password123)
+                  Demo accounts: joe@example.com / jane@example.com / admin@example.com (password: password123)
                 </p>
               </div>
             </>
