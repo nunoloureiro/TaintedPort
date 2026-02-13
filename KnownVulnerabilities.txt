@@ -1,0 +1,128 @@
+============================================================
+  TaintedPort - Known Vulnerabilities
+  Use this to verify the accuracy of your DAST scan results.
+============================================================
+
+#  VULNERABILITY                   LOCATION                            CWE         SEVERITY
+-- -------------------------------- -----------------------------------  ----------  --------
+1  SQL Injection                   POST /auth/login (email field)      CWE-89      High
+2  SQL Injection                   GET /wines/:id (wine ID in URL)     CWE-89      High
+3  Reflected XSS                   POST /auth/login (email in error)   CWE-79      Medium
+4  Reflected XSS                   GET /wines?search= (search query)   CWE-79      Medium
+5  Stored XSS                      PUT /auth/profile (name field)      CWE-79      Medium
+6  Stored XSS                      POST /orders (shipping name)        CWE-79      Medium
+7  JWT "none" Algorithm Accepted   Authorization header (any endpoint) CWE-345     High
+8  JWT Signature Not Verified      Authorization header (any endpoint) CWE-347     High
+9  Directory Listing               /files/ (both hosts)                CWE-548     Medium
+10 CSRF                            POST /orders (checkout)             CWE-352     Medium
+
+
+DETAILED DESCRIPTIONS
+=====================
+
+1. SQL Injection - Login Email
+   Endpoint: POST /auth/login
+   Parameter: email (JSON body)
+   File: backend/api/models/User.php -> findByEmailUnsafe()
+   Description: The email value is directly concatenated into a SQL query
+   without parameterized statements. An attacker can inject SQL via the
+   email field to bypass authentication or extract data.
+   Example: email = ' OR 1=1 --
+
+2. SQL Injection - Wine Detail (ID)
+   Endpoint: GET /wines/:id
+   Parameter: id (URL path)
+   File: backend/api/models/Wine.php -> getByIdUnsafe()
+   Description: The wine ID is directly concatenated into a SQL query.
+   The route accepts non-numeric values, allowing SQL injection.
+   Example: GET /wines/1 UNION SELECT * FROM users--
+
+3. Reflected XSS - Login Email
+   Endpoint: POST /auth/login
+   Parameter: email (JSON body)
+   File: backend/api/controllers/AuthController.php -> login()
+   Description: On failed login, the error message includes the raw email
+   address: "Login failed for <email>. Please check your credentials."
+   The email is not HTML-encoded, so injecting HTML/JavaScript in the
+   email field will be reflected in the API response.
+   Example: email = <script>alert(1)</script>
+
+4. Reflected XSS - Wine Search
+   Endpoint: GET /wines?search=<payload>
+   Parameter: search (query string)
+   File: backend/api/controllers/WineController.php -> index()
+   Frontend: frontend/app/wines/WinesCatalog.js
+   Description: The search query is returned in the API response as-is
+   in a "message" field. The frontend renders this message using
+   dangerouslySetInnerHTML, enabling XSS.
+   Example: search=<img src=x onerror=alert(1)>
+
+5. Stored XSS - User Name (Account Page)
+   Endpoint: PUT /auth/profile
+   Parameter: name (JSON body)
+   File: frontend/components/Navbar.js
+   Description: The user's name is stored without sanitization and
+   rendered in the navigation bar using dangerouslySetInnerHTML
+   ("Hi, <name>"). An attacker can set their name to a script payload
+   and it will execute on every page load.
+   Example: name = <img src=x onerror=alert(document.cookie)>
+
+6. Stored XSS - Shipping Name (Checkout)
+   Endpoint: POST /orders
+   Parameter: shipping_address.name (JSON body)
+   Frontend: frontend/app/orders/[id]/page.js
+   Description: The shipping name entered during checkout is stored in
+   the database and rendered on the order detail page using
+   dangerouslySetInnerHTML. Anyone viewing the order details will
+   have the XSS payload executed.
+   Example: name = <script>alert('XSS')</script>
+
+7. JWT "none" Algorithm Accepted
+   Endpoint: Any authenticated endpoint
+   Header: Authorization: Bearer <token>
+   File: backend/api/config/jwt.php -> decode()
+   Description: The JWT decoder checks the "alg" field in the token
+   header. If alg is "none", it skips signature verification entirely
+   and accepts the token payload as valid. An attacker can forge tokens
+   by setting alg=none and providing arbitrary payload data.
+   Example: Header={"alg":"none","typ":"JWT"}, Payload={"user_id":1,"email":"admin@example.com","exp":9999999999}
+
+8. JWT Signature Not Verified
+   Endpoint: Any authenticated endpoint
+   Header: Authorization: Bearer <token>
+   File: backend/api/config/jwt.php -> decode()
+   Description: Even for HS256 tokens, when the signature doesn't match,
+   the code only logs a warning but still accepts the token. An attacker
+   can modify the payload of any JWT token (e.g., change user_id) without
+   needing to know the secret key.
+
+9. Directory Listing
+   URL: https://taintedport.com/files/
+   URL: https://api.taintedport.com/files/
+   File: docker/nginx.conf
+   Description: Nginx is configured with autoindex enabled on /files/,
+   which maps to the backend source directory. This exposes all PHP
+   source code, the SQLite database file, and configuration files
+   including the JWT secret. An attacker can download the database
+   and extract user credentials.
+
+10. CSRF on Checkout
+    Endpoint: POST /orders
+    File: backend/api/index.php (CORS config)
+    Description: The CORS policy reflects any Origin header back with
+    Access-Control-Allow-Credentials: true. Combined with the lack of
+    CSRF tokens, an attacker can create a malicious page that submits
+    orders on behalf of authenticated users. If the user has items in
+    their cart and visits the attacker's page, the order will be placed
+    automatically.
+
+
+NOTES FOR TESTERS
+=================
+
+- Default credentials: joe@example.com / password123
+- The database resets weekly (Monday 00:00 UTC) or on container restart.
+- JWT secret is: pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI (also visible via directory listing)
+- The frontend is at https://taintedport.com
+- The API is at https://api.taintedport.com
+- For local Docker: http://localhost:8080 (frontend) and http://localhost:8080/api/ (API)

@@ -33,23 +33,11 @@ else
     echo "[1/4] Docker already installed."
 fi
 
-# --- Pull or build the image ---
-echo "[2/4] Setting up TaintedPort container..."
-
-# Option A: Pull from a registry (uncomment and set your image)
-# docker pull yourusername/taintedport:latest
-
-# Option B: Build locally (if you copied the source)
-if [ -f Dockerfile ]; then
-    echo "  Building from source..."
-    sudo docker build -t taintedport:latest .
-else
-    echo "  ERROR: No Dockerfile found and no image to pull."
-    echo "  Either:"
-    echo "    - Run this script from the project root (with Dockerfile)"
-    echo "    - Or uncomment the 'docker pull' line above"
-    exit 1
-fi
+# --- Pull the image ---
+DOCKER_IMAGE="${TAINTEDPORT_IMAGE:-nuno/taintedport:latest}"
+echo "[2/4] Pulling TaintedPort image: $DOCKER_IMAGE"
+sudo docker pull "$DOCKER_IMAGE"
+sudo docker tag "$DOCKER_IMAGE" taintedport:latest
 
 # --- Start the container ---
 echo "[3/4] Starting TaintedPort..."

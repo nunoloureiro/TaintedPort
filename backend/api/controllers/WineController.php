@@ -21,15 +21,24 @@ class WineController {
 
         $wines = $this->wine->getAll($params);
 
-        return [
+        $result = [
             'success' => true,
             'wines' => $wines,
             'total' => count($wines)
         ];
+
+        // VULN: Reflected XSS - search term is reflected without sanitization
+        if (!empty($params['search'])) {
+            $result['search_query'] = $params['search'];
+            $result['message'] = 'Showing results for: ' . $params['search'];
+        }
+
+        return $result;
     }
 
     public function show($id) {
-        $wine = $this->wine->getById($id);
+        // VULN: SQL Injection via wine ID
+        $wine = $this->wine->getByIdUnsafe($id);
 
         if (!$wine) {
             http_response_code(404);

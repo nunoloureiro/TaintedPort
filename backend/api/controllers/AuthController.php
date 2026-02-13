@@ -59,11 +59,13 @@ class AuthController {
             return ['success' => false, 'message' => 'Email and password are required.'];
         }
 
-        $user = $this->user->findByEmail($data['email']);
+        // VULN: SQL Injection - email is concatenated directly into query
+        // VULN: Reflected XSS - email is reflected in error message without sanitization
+        $user = $this->user->findByEmailUnsafe($data['email']);
 
         if (!$user || !$this->user->verifyPassword($data['password'], $user['password_hash'])) {
             http_response_code(401);
-            return ['success' => false, 'message' => 'Invalid email or password.'];
+            return ['success' => false, 'message' => 'Login failed for ' . $data['email'] . '. Please check your credentials.'];
         }
 
         // Check if 2FA is enabled

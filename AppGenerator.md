@@ -831,6 +831,36 @@ sqlite3 database.db
 - Wine recommendations based on preferences
 - Dark/light mode toggle
 
+## Intentional Vulnerabilities
+
+This application is intentionally vulnerable for DAST/security testing purposes. The following vulnerabilities are built in:
+
+### SQL Injection (SQLi)
+1. **Login email field**: The login endpoint uses `findByEmailUnsafe()` which directly concatenates the email into the SQL query without parameterized statements. Exploitable via the email field on `POST /auth/login`.
+2. **Wine detail page (wine ID)**: The wine detail endpoint (`GET /wines/:id`) uses `getByIdUnsafe()` which concatenates the ID directly into SQL. The route accepts non-numeric IDs.
+
+### Cross-Site Scripting (XSS)
+3. **Reflected XSS on login email**: The login error message includes the raw email address without HTML encoding: `"Login failed for <email>. Please check your credentials."` The frontend should render this unsafely.
+4. **Reflected XSS on wine search**: The wine search API returns a `message` field containing the raw search query. The frontend renders it via `dangerouslySetInnerHTML`.
+5. **Stored XSS on user name (account page)**: The user's name is stored without sanitization and displayed in the Navbar via `dangerouslySetInnerHTML` (e.g., `Hi, <name>`). Change name on the account page to inject.
+6. **Stored XSS on shipping name (checkout/order detail)**: The shipping name entered at checkout is stored and displayed on the order detail page (`/orders/:id`) via `dangerouslySetInnerHTML`.
+
+### JWT Vulnerabilities
+7. **JWT "none" algorithm accepted**: The JWT decoder accepts tokens with `alg: "none"` and skips signature verification entirely, allowing token forgery.
+8. **JWT signature not verified**: Even for HS256 tokens, the signature validation only logs a warning on mismatch but accepts the token anyway.
+
+### Server Misconfiguration
+9. **Directory listing**: Nginx serves `/files/` with `autoindex on`, exposing the backend source code and database file at both `taintedport.com/files/` and `api.taintedport.com/files/`.
+
+### Cross-Site Request Forgery (CSRF)
+10. **CSRF on checkout**: The checkout endpoint (`POST /orders`) has no CSRF token. CORS is configured to reflect any `Origin` header with `Access-Control-Allow-Credentials: true`, allowing cross-origin requests with cookies/tokens.
+
+### Implementation Notes
+- The **login page frontend** should render the server error message as-is (it already does via React state, and the backend includes unsanitized user input in the error).
+- For **reflected XSS on login**, a DAST scanner testing the login form should detect the email being reflected in the error response body.
+- The **JWT secret** is hardcoded in `backend/api/config/jwt.php` and also exposed via directory listing.
+- All vulnerabilities are documented in `KnownVulnerabilities.txt` at the project root.
+
 ## Design Inspiration
 
 Study these aspects of https://labs.snyk.io/try-now/:

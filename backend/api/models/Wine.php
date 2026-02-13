@@ -82,6 +82,20 @@ class Wine {
         return $wine;
     }
 
+    /**
+     * VULN: SQL Injection - id is directly concatenated into the query.
+     */
+    public function getByIdUnsafe($id) {
+        $result = $this->db->query("SELECT * FROM wines WHERE id = $id");
+        if (!$result) return null;
+        $wine = $result->fetchArray(SQLITE3_ASSOC);
+        if ($wine) {
+            $wine['price'] = floatval($wine['price']);
+            $wine['alcohol'] = floatval($wine['alcohol']);
+        }
+        return $wine;
+    }
+
     public function getRegions() {
         $result = $this->db->query('SELECT DISTINCT region FROM wines ORDER BY region');
         $regions = [];

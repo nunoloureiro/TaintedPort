@@ -9,6 +9,7 @@ export default function WinesCatalog() {
   const searchParams = useSearchParams();
   const [wines, setWines] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchMessage, setSearchMessage] = useState('');
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState(searchParams.get('region') || '');
   const [type, setType] = useState('');
@@ -31,6 +32,7 @@ export default function WinesCatalog() {
 
       const res = await wineAPI.getAll(params);
       setWines(res.data.wines || []);
+      setSearchMessage(res.data.message || '');
     } catch (err) {
       console.error('Failed to fetch wines:', err);
     } finally {
@@ -77,6 +79,10 @@ export default function WinesCatalog() {
           <p className="text-zinc-400">
             Explore our curated selection of {wines.length} Portuguese wines
           </p>
+          {/* VULN: Reflected XSS - search message rendered as raw HTML */}
+          {searchMessage && (
+            <p className="text-zinc-300 mt-2" dangerouslySetInnerHTML={{ __html: searchMessage }} />
+          )}
         </div>
 
         {/* Search & Filter Bar */}

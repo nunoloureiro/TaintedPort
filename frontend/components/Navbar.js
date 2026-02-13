@@ -31,6 +31,8 @@ export default function Navbar() {
 
             {user ? (
               <>
+                {/* VULN: Stored XSS - user name rendered as raw HTML */}
+                <span className="text-zinc-300 text-sm" dangerouslySetInnerHTML={{ __html: `Hi, ${user.name}` }} />
                 <Link href="/cart" className="relative text-zinc-400 hover:text-white transition-colors">
                   Cart
                   {itemCount > 0 && (

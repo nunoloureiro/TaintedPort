@@ -691,6 +691,9 @@ export default function AccountPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-white font-semibold text-lg">€{order.total.toFixed(2)}</p>
+                      <a href={`/orders/${order.id}`} className="text-accent-purple text-sm hover:text-accent-purple-light transition-colors">
+                        View Details →
+                      </a>
                     </div>
                   </div>
                 </div>

@@ -137,7 +137,7 @@ docker push yourusername/taintedport:latest
 Others can then run:
 
 ```bash
-docker run -p 8080:80 yourusername/taintedport:latest
+docker run -p 8080:80 nunoloureiro/taintedport:latest
 ```
 
 ## Tech Stack

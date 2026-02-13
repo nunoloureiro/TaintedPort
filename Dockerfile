@@ -24,14 +24,15 @@ RUN npm run build
 # --- Stage 2: Final runtime image ---
 FROM php:8.2-fpm-alpine
 
-# Install nginx, supervisor, sqlite
+# Install nginx, supervisor, sqlite, and dev libs for PHP extensions
 RUN apk add --no-cache \
     nginx \
     supervisor \
     nodejs \
-    sqlite
+    sqlite \
+    sqlite-dev
 
-# Install PHP SQLite extension (already included in php:8.2-fpm-alpine, but ensure)
+# Install PHP SQLite extension
 RUN docker-php-ext-install pdo pdo_sqlite
 
 # ---------- PHP backend ----------

@@ -3,18 +3,10 @@
 // CORS headers
 header('Content-Type: application/json');
 
-$allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:8080',
-    'https://taintedport.com',
-    'http://taintedport.com',
-];
-$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
-if (in_array($origin, $allowedOrigins)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-} else {
-    header('Access-Control-Allow-Origin: https://taintedport.com');
-}
+// VULN: CSRF - CORS allows any origin, reflecting the Origin header back
+// This enables cross-site requests with credentials
+$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
+header('Access-Control-Allow-Origin: ' . $origin);
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
@@ -107,9 +99,10 @@ try {
         $ctrl = new WineController();
         $response = $ctrl->types();
     }
-    elseif (preg_match('#^/wines/(\d+)$#', $path, $matches) && $method === 'GET') {
+    // VULN: SQL Injection - wine ID is not restricted to digits only
+    elseif (preg_match('#^/wines/(.+)$#', $path, $matches) && $method === 'GET' && $matches[1] !== 'regions' && $matches[1] !== 'types') {
         $ctrl = new WineController();
-        $response = $ctrl->show(intval($matches[1]));
+        $response = $ctrl->show($matches[1]);
     }
     // Cart routes (protected)
     elseif ($path === '/cart' && $method === 'GET') {
@@ -132,7 +125,8 @@ try {
         $ctrl = new CartController();
         $response = $ctrl->remove($authUser, $matches[1]);
     }
-    // Order routes (protected)
+    // VULN: CSRF - checkout endpoint has no CSRF token validation
+    // and accepts requests from any origin
     elseif ($path === '/orders' && $method === 'POST') {
         $authUser = authenticateToken();
         $ctrl = new OrderController();

@@ -29,6 +29,16 @@ class User {
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
+    /**
+     * VULN: SQL Injection - email is directly concatenated into the query.
+     * Used by the login endpoint.
+     */
+    public function findByEmailUnsafe($email) {
+        $result = $this->db->query("SELECT * FROM users WHERE email = '$email'");
+        if (!$result) return null;
+        return $result->fetchArray(SQLITE3_ASSOC);
+    }
+
     public function findById($id) {
         $stmt = $this->db->prepare('SELECT id, name, email, totp_enabled, created_at FROM users WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
