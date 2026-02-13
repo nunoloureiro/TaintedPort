@@ -9,7 +9,7 @@ class Order {
         $this->db = Database::getInstance();
     }
 
-    public function create($userId, $shippingData, $deliveryNotes = '') {
+    public function create($userId, $shippingData, $deliveryNotes = '', $discountPercent = 0) {
         $cart = new Cart();
         $cartData = $cart->getItems($userId);
 
@@ -18,6 +18,12 @@ class Order {
         }
 
         $total = $cartData['total'];
+
+        // VULN: Discount bypass - discount_percent is trusted from client, no validation
+        if ($discountPercent > 0) {
+            $total = $total * (1 - ($discountPercent / 100));
+            if ($total < 0) $total = 0;
+        }
 
         $stmt = $this->db->prepare(
             'INSERT INTO orders (user_id, total, shipping_name, shipping_street, shipping_city, 
@@ -75,11 +81,11 @@ class Order {
     }
 
     public function getById($orderId, $userId) {
+        // VULN: BOLA - user_id is not checked, any authenticated user can view any order
         $stmt = $this->db->prepare(
-            'SELECT * FROM orders WHERE id = :id AND user_id = :user_id'
+            'SELECT * FROM orders WHERE id = :id'
         );
         $stmt->bindValue(':id', $orderId, SQLITE3_INTEGER);
-        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         $order = $result->fetchArray(SQLITE3_ASSOC);
 

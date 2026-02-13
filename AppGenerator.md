@@ -855,11 +855,18 @@ This application is intentionally vulnerable for DAST/security testing purposes.
 ### Cross-Site Request Forgery (CSRF)
 10. **CSRF on checkout**: The checkout endpoint (`POST /orders`) has no CSRF token. CORS is configured to reflect any `Origin` header with `Access-Control-Allow-Credentials: true`, allowing cross-origin requests with cookies/tokens.
 
+### Business Logic Vulnerabilities
+11. **BOLA (IDOR) on order details**: The `GET /orders/:id` endpoint does not verify that the authenticated user owns the order. Any authenticated user can view any order by enumerating IDs.
+12. **BOLA / Mass Assignment on profile update**: The `PUT /auth/profile` endpoint accepts an optional `user_id` field. If present, it updates that user's name instead of the authenticated user's.
+13. **Price manipulation on cart**: The `POST /cart/add` endpoint accepts an optional `price` field that overrides the wine's price in the database.
+14. **Broken access control on 2FA disable**: The `POST /auth/2fa/disable` endpoint accepts an optional `user_id` field. If present, it disables 2FA for that user instead of the authenticated user.
+15. **Discount code bypass**: The `POST /orders` endpoint accepts `discount_code` and `discount_percent` fields. Any non-empty code is accepted and the percent is applied without validation (100 = free, >100 = negative total).
+
 ### Implementation Notes
-- The **login page frontend** should render the server error message as-is (it already does via React state, and the backend includes unsanitized user input in the error).
+- The **login page frontend** should render the server error message as-is (it already does via React state, and the backend includes unsanitized user input in the error). The email input should be `type="text"` (not `type="email"`) to allow HTML injection from the browser.
 - For **reflected XSS on login**, a DAST scanner testing the login form should detect the email being reflected in the error response body.
 - The **JWT secret** is hardcoded in `backend/api/config/jwt.php` and also exposed via directory listing.
-- All vulnerabilities are documented in `KnownVulnerabilities.txt` at the project root.
+- All vulnerabilities are documented in `KnownVulnerabilities.txt` and `KnownVulnerabilitiesPoC.txt` at the project root.
 
 ## Design Inspiration
 

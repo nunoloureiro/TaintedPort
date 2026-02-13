@@ -34,7 +34,7 @@ else
 fi
 
 # --- Pull the image ---
-DOCKER_IMAGE="${TAINTEDPORT_IMAGE:-nuno/taintedport:latest}"
+DOCKER_IMAGE="${TAINTEDPORT_IMAGE:-nunoloureiro/taintedport:latest}"
 echo "[2/4] Pulling TaintedPort image: $DOCKER_IMAGE"
 sudo docker pull "$DOCKER_IMAGE"
 sudo docker tag "$DOCKER_IMAGE" taintedport:latest

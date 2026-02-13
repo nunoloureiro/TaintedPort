@@ -117,6 +117,64 @@ DETAILED DESCRIPTIONS
     automatically.
 
 
+BUSINESS LOGIC VULNERABILITIES
+==============================
+
+#  VULNERABILITY                   LOCATION                                CWE         SEVERITY
+-- -------------------------------- ---------------------------------------- ----------  --------
+11 BOLA (IDOR) on Order Details    GET /orders/:id                         CWE-639     High
+12 BOLA / Mass Assignment          PUT /auth/profile (user_id param)       CWE-639     High
+13 Price Manipulation              POST /cart/add (price param)            CWE-472     High
+14 Broken Access Control on 2FA    POST /auth/2fa/disable (user_id param)  CWE-639     High
+15 Discount Code Bypass            POST /orders (discount_code/percent)    CWE-472     High
+
+
+11. BOLA (IDOR) on Order Details
+    Endpoint: GET /orders/:id
+    File: backend/api/models/Order.php -> getById()
+    Description: The order detail endpoint does not verify that the
+    authenticated user owns the order. Any authenticated user can view
+    any order by guessing or enumerating order IDs.
+
+12. BOLA / Mass Assignment on Profile Update
+    Endpoint: PUT /auth/profile
+    Parameter: user_id (JSON body)
+    File: backend/api/controllers/AuthController.php -> updateProfile()
+    Description: The profile update endpoint accepts an optional user_id
+    parameter. If provided, it updates that user's name instead of the
+    authenticated user's name. An attacker can modify any user's profile.
+
+13. Price Manipulation on Cart
+    Endpoint: POST /cart/add
+    Parameter: price (JSON body)
+    File: backend/api/controllers/CartController.php -> add()
+    File: backend/api/models/Cart.php -> addItem()
+    Description: The cart add endpoint accepts an optional price field.
+    If provided, it updates the wine's price in the database to the
+    client-supplied value before adding to cart. An attacker can set
+    any wine's price to 0.01 and buy it at that price.
+
+14. Broken Access Control on 2FA Disable
+    Endpoint: POST /auth/2fa/disable
+    Parameter: user_id (JSON body)
+    File: backend/api/controllers/AuthController.php -> disable2fa()
+    Description: The 2FA disable endpoint accepts an optional user_id
+    parameter. If provided, it disables 2FA for that user instead of
+    the authenticated user. An attacker can disable any user's 2FA
+    by providing their user_id (only needs their own valid password).
+
+15. Discount Code Bypass
+    Endpoint: POST /orders
+    Parameters: discount_code, discount_percent (JSON body)
+    File: backend/api/controllers/OrderController.php -> create()
+    File: backend/api/models/Order.php -> create()
+    Description: The checkout endpoint accepts discount_code and
+    discount_percent fields. Any non-empty discount_code is accepted
+    as valid, and discount_percent is applied directly without validation.
+    An attacker can send discount_percent=100 for a free order, or
+    even negative values for credit.
+
+
 NOTES FOR TESTERS
 =================
 

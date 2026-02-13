@@ -28,7 +28,20 @@ class OrderController {
         }
 
         $notes = isset($data['delivery_notes']) ? $data['delivery_notes'] : '';
-        $orderId = $this->order->create($authUser['user_id'], $addr, $notes);
+
+        // VULN: Discount code bypass - any discount_percent value is accepted without validation
+        // There is no list of valid codes; the server trusts whatever the client sends
+        $discountPercent = 0;
+        if (isset($data['discount_code'])) {
+            // "Validate" the code - but actually accept anything and apply a discount
+            // The only "invalid" code is an empty string
+            if (!empty($data['discount_code'])) {
+                $discountPercent = isset($data['discount_percent']) ? floatval($data['discount_percent']) : 10;
+                // No cap on discount - client can send 100 for a free order
+            }
+        }
+
+        $orderId = $this->order->create($authUser['user_id'], $addr, $notes, $discountPercent);
 
         if ($orderId === null) {
             http_response_code(400);

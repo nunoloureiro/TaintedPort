@@ -130,8 +130,8 @@ A cron job runs `docker restart taintedport` every Monday at 00:00 UTC. Since th
 
 ```bash
 docker build -t taintedport:latest .
-docker tag taintedport:latest yourusername/taintedport:latest
-docker push yourusername/taintedport:latest
+docker tag taintedport:latest nunoloureiro/taintedport:latest
+docker push nunoloureiro/taintedport:latest
 ```
 
 Others can then run:

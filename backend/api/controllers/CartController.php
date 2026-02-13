@@ -28,7 +28,10 @@ class CartController {
             return ['success' => false, 'message' => 'Quantity must be between 1 and 12.'];
         }
 
-        $result = $this->cart->addItem($authUser['user_id'], intval($data['wine_id']), $quantity);
+        // VULN: Price manipulation - if client sends a price, it overrides the DB price
+        $customPrice = isset($data['price']) ? floatval($data['price']) : null;
+
+        $result = $this->cart->addItem($authUser['user_id'], intval($data['wine_id']), $quantity, $customPrice);
 
         if (!$result) {
             http_response_code(404);

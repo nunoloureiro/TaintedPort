@@ -32,13 +32,22 @@ class Cart {
         return ['items' => $items, 'total' => round($total, 2)];
     }
 
-    public function addItem($userId, $wineId, $quantity) {
+    public function addItem($userId, $wineId, $quantity, $customPrice = null) {
         // Check if wine exists
         $stmt = $this->db->prepare('SELECT id FROM wines WHERE id = :id');
         $stmt->bindValue(':id', $wineId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         if (!$result->fetchArray()) {
             return false;
+        }
+
+        // VULN: Price manipulation - if a custom price is provided, update the wine's price
+        // This allows a client to set any price for a wine before adding to cart
+        if ($customPrice !== null) {
+            $stmt = $this->db->prepare('UPDATE wines SET price = :price WHERE id = :id');
+            $stmt->bindValue(':price', $customPrice, SQLITE3_FLOAT);
+            $stmt->bindValue(':id', $wineId, SQLITE3_INTEGER);
+            $stmt->execute();
         }
 
         // Upsert: insert or update quantity

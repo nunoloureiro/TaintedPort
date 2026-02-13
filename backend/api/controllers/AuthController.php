@@ -133,9 +133,12 @@ class AuthController {
             return ['success' => false, 'message' => 'Name must be 100 characters or less.'];
         }
 
-        $this->user->updateName($authUser['user_id'], $name);
+        // VULN: BOLA / Mass Assignment - if client sends user_id, it updates that user instead
+        $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
 
-        $user = $this->user->findById($authUser['user_id']);
+        $this->user->updateName($targetUserId, $name);
+
+        $user = $this->user->findById($targetUserId);
         $user['totp_enabled'] = !empty($user['totp_enabled']) && $user['totp_enabled'] == 1;
 
         return [
@@ -309,7 +312,9 @@ class AuthController {
             return ['success' => false, 'message' => 'Invalid password.'];
         }
 
-        $this->user->disableTotp($authUser['user_id']);
+        // VULN: IDOR - if client sends user_id, it disables 2FA for that user instead
+        $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
+        $this->user->disableTotp($targetUserId);
 
         return [
             'success' => true,
