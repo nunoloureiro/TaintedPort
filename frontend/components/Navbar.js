@@ -22,6 +22,10 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center space-x-6">
+            {user && (
+              /* VULN: Stored XSS - user name rendered as raw HTML */
+              <span className="text-zinc-300 text-sm border-r border-dark-border pr-6" dangerouslySetInnerHTML={{ __html: `Hi, ${user.name}` }} />
+            )}
             <Link href="/wines" className="text-zinc-400 hover:text-white transition-colors">
               Wines
             </Link>
@@ -31,8 +35,6 @@ export default function Navbar() {
 
             {user ? (
               <>
-                {/* VULN: Stored XSS - user name rendered as raw HTML */}
-                <span className="text-zinc-300 text-sm" dangerouslySetInnerHTML={{ __html: `Hi, ${user.name}` }} />
                 <Link href="/cart" className="relative text-zinc-400 hover:text-white transition-colors">
                   Cart
                   {itemCount > 0 && (

@@ -47,10 +47,14 @@ docker compose up -d
 
 App available at `http://localhost:8080`. The `docker-compose.yml` builds with `API_URL=/api` so the frontend calls the API via path-based routing (no separate hostname needed locally).
 
-## Demo Account
+## Demo Accounts
 
-- **Email**: joe@example.com
-- **Password**: password123
+| User | Email | Password |
+|------|-------|----------|
+| Joe Silva | joe@example.com | password123 |
+| Jane Doe | jane@example.com | password123 |
+
+Both users have pre-seeded orders for testing BOLA/IDOR vulnerabilities.
 
 ## Local Development (without Docker)
 

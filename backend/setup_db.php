@@ -300,17 +300,69 @@ foreach ($wines as $w) {
     $stmt->reset();
 }
 
-// Create a demo user
+// Create demo users
 $demoHash = password_hash('password123', PASSWORD_BCRYPT);
+
 $stmt = $db->prepare('INSERT INTO users (name, email, password_hash) VALUES (:name, :email, :hash)');
 $stmt->bindValue(':name', 'Joe Silva', SQLITE3_TEXT);
 $stmt->bindValue(':email', 'joe@example.com', SQLITE3_TEXT);
 $stmt->bindValue(':hash', $demoHash, SQLITE3_TEXT);
 $stmt->execute();
+$joeId = $db->lastInsertRowID();
+
+$stmt->reset();
+$stmt->bindValue(':name', 'Jane Doe', SQLITE3_TEXT);
+$stmt->bindValue(':email', 'jane@example.com', SQLITE3_TEXT);
+$stmt->bindValue(':hash', $demoHash, SQLITE3_TEXT);
+$stmt->execute();
+$janeId = $db->lastInsertRowID();
+
+// Seed orders for Joe (user 1)
+$db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
+VALUES ($joeId, 465.00, 'delivered', 'Joe Silva', 'Rua das Flores 42', 'Lisboa', '1200-195', '+351 912 345 678', 'Ring the doorbell twice')");
+$joeOrder1 = $db->lastInsertRowID();
+
+$db->exec("INSERT INTO order_items (order_id, wine_id, wine_name, price, quantity, subtotal) VALUES
+($joeOrder1, 1, 'Quinta do Vallado Douro Tinto', 185.00, 1, 185.00),
+($joeOrder1, 8, 'Quinta do Crasto Reserva Old Vines', 280.00, 1, 280.00)");
+
+$db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
+VALUES ($joeId, 178.00, 'pending', 'Joe Silva', 'Rua das Flores 42', 'Lisboa', '1200-195', '+351 912 345 678', '')");
+$joeOrder2 = $db->lastInsertRowID();
+
+$db->exec("INSERT INTO order_items (order_id, wine_id, wine_name, price, quantity, subtotal) VALUES
+($joeOrder2, 5, 'Mateus Rosé', 59.00, 2, 118.00),
+($joeOrder2, 21, 'Casal Garcia Vinho Verde', 55.00, 1, 55.00),
+($joeOrder2, 3, 'Quinta da Aveleda Vinho Verde', 75.00, 1, 75.00)");
+
+// Seed orders for Jane (user 2)
+$db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
+VALUES ($janeId, 3500.00, 'shipped', 'Jane Doe', 'Avenida da Liberdade 110', 'Porto', '4000-322', '+351 934 567 890', 'Leave with the concierge')");
+$janeOrder1 = $db->lastInsertRowID();
+
+$db->exec("INSERT INTO order_items (order_id, wine_id, wine_name, price, quantity, subtotal) VALUES
+($janeOrder1, 4, 'Barca Velha', 3500.00, 1, 3500.00)");
+
+$db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
+VALUES ($janeId, 625.00, 'delivered', 'Jane Doe', 'Avenida da Liberdade 110', 'Porto', '4000-322', '+351 934 567 890', '')");
+$janeOrder2 = $db->lastInsertRowID();
+
+$db->exec("INSERT INTO order_items (order_id, wine_id, wine_name, price, quantity, subtotal) VALUES
+($janeOrder2, 2, 'Pêra-Manca Branco', 890.00, 1, 890.00)");
+
+$db->exec("INSERT INTO orders (user_id, total, status, shipping_name, shipping_street, shipping_city, shipping_postal_code, shipping_phone, delivery_notes)
+VALUES ($janeId, 504.00, 'pending', 'Jane Doe', 'Avenida da Liberdade 110', 'Porto', '4000-322', '+351 934 567 890', 'Call before delivery')");
+$janeOrder3 = $db->lastInsertRowID();
+
+$db->exec("INSERT INTO order_items (order_id, wine_id, wine_name, price, quantity, subtotal) VALUES
+($janeOrder3, 10, 'Graham''s Port 10 Year Tawny', 220.00, 1, 220.00),
+($janeOrder3, 17, 'Blandy''s 10 Year Malmsey Madeira', 285.00, 1, 285.00)");
 
 echo "Database setup complete!\n";
 echo "- Created 5 tables\n";
 echo "- Seeded " . count($wines) . " wines\n";
-echo "- Created demo user: joe@example.com / password123\n";
+echo "- Created demo user: joe@example.com / password123 (id: $joeId)\n";
+echo "- Created demo user: jane@example.com / password123 (id: $janeId)\n";
+echo "- Created 2 orders for Joe, 3 orders for Jane\n";
 
 $db->close();
