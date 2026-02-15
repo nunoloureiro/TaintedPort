@@ -64,7 +64,7 @@ class AuthController {
 
         // VULN: SQL Injection - email is concatenated directly into query
         // VULN: Reflected XSS - email is reflected in error message without sanitization
-        $user = $this->user->findByEmailUnsafe($data['email']);
+        $user = $this->user->findByEmailUnsafe(rawurldecode($data['email']));
 
         if (!$user || !$this->user->verifyPassword($data['password'], $user['password_hash'])) {
             http_response_code(401);
