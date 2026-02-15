@@ -38,7 +38,7 @@ class WineController {
 
     public function show($id) {
         // VULN: SQL Injection via wine ID
-        $wine = $this->wine->getByIdUnsafe($id);
+        $wine = $this->wine->getByIdUnsafe(rawurldecode($id));
 
         if (!$wine) {
             http_response_code(404);
