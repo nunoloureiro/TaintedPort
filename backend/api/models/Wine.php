@@ -84,14 +84,15 @@ class Wine {
 
     /**
      * VULN: SQL Injection - id is directly concatenated into the query.
+     * The wines table has 15 columns, so UNION SELECT needs 15 values.
      */
     public function getByIdUnsafe($id) {
-        $result = $this->db->query("SELECT * FROM wines WHERE id = $id");
+        $result = @$this->db->query("SELECT * FROM wines WHERE id = $id");
         if (!$result) return null;
         $wine = $result->fetchArray(SQLITE3_ASSOC);
         if ($wine) {
-            $wine['price'] = floatval($wine['price']);
-            $wine['alcohol'] = floatval($wine['alcohol']);
+            $wine['price'] = isset($wine['price']) ? floatval($wine['price']) : 0;
+            $wine['alcohol'] = isset($wine['alcohol']) ? floatval($wine['alcohol']) : 0;
         }
         return $wine;
     }

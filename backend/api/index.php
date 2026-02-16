@@ -29,7 +29,7 @@ $requestUri = $_SERVER['REQUEST_URI'];
 $basePath = '/api';
 
 // Remove query string for routing
-$path = parse_url($requestUri, PHP_URL_PATH);
+$path = urldecode(parse_url($requestUri, PHP_URL_PATH));
 
 // Remove base path prefix if present
 if (strpos($path, $basePath) === 0) {

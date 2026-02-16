@@ -29,7 +29,7 @@ The database resets automatically every time the container starts, giving you a 
 
 ```bash
 git clone <repo-url>
-cd Vulnpoc
+cd TaintedPort
 
 # Local build (uses /api path-based routing)
 docker compose build

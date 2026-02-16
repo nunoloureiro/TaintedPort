@@ -44,6 +44,21 @@ class User {
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
+    /**
+     * VULN: SQL Injection - both email and password are concatenated into the query.
+     * With SQLi on the email field (e.g. ' OR 1=1 --), the AND password clause
+     * is commented out, bypassing authentication entirely.
+     * Normal logins: plaintext password != bcrypt hash, so this returns null
+     * and the caller falls back to the safe bcrypt verification path.
+     */
+    public function authenticateUnsafe($email, $password) {
+        $result = $this->db->query(
+            "SELECT * FROM users WHERE email = '$email' AND password_hash = '$password'"
+        );
+        if (!$result) return null;
+        return $result->fetchArray(SQLITE3_ASSOC);
+    }
+
     public function findById($id) {
         $stmt = $this->db->prepare('SELECT id, name, email, is_admin, totp_enabled, created_at FROM users WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);

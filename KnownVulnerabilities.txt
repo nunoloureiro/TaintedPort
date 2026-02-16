@@ -35,7 +35,7 @@ DETAILED DESCRIPTIONS
    File: backend/api/models/Wine.php -> getByIdUnsafe()
    Description: The wine ID is directly concatenated into a SQL query.
    The route accepts non-numeric values, allowing SQL injection.
-   Example: GET /wines/1 UNION SELECT * FROM users--
+   Example: GET /wines/0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--
 
 3. Reflected XSS - Login Email
    Endpoint: POST /auth/login

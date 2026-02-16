@@ -38,6 +38,7 @@ RUN docker-php-ext-install pdo pdo_sqlite
 # ---------- PHP backend ----------
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
+COPY KnownVulnerabilities.txt /var/www/backend/KnownVulnerabilities.txt
 
 # Ensure the database directory is writable
 RUN mkdir -p /var/www/backend && chown -R www-data:www-data /var/www/backend
