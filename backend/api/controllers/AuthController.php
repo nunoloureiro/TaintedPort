@@ -104,7 +104,7 @@ class AuthController {
         $isAdmin = !empty($user['is_admin']) && $user['is_admin'] == 1;
         $token = JWT::encode(['user_id' => $user['id'], 'email' => $user['email'], 'is_admin' => $isAdmin]);
 
-        return [
+        $response = [
             'success' => true,
             'token' => $token,
             'user' => [
@@ -114,6 +114,13 @@ class AuthController {
                 'is_admin' => $isAdmin
             ]
         ];
+
+        // VULN: Open Redirect - redirect URL is passed through without validation
+        if (!empty($data['redirect'])) {
+            $response['redirect_url'] = $data['redirect'];
+        }
+
+        return $response;
     }
 
     public function me($authUser) {

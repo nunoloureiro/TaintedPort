@@ -57,7 +57,13 @@ class OrderController {
     }
 
     public function index($authUser) {
-        $orders = $this->order->getByUser($authUser['user_id']);
+        // VULN: Blind SQL Injection via status filter
+        $status = isset($_GET['status']) ? $_GET['status'] : null;
+        if ($status) {
+            $orders = $this->order->getByUserFiltered($authUser['user_id'], $status);
+        } else {
+            $orders = $this->order->getByUser($authUser['user_id']);
+        }
         return ['success' => true, 'orders' => $orders];
     }
 

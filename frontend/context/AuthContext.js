@@ -35,10 +35,14 @@ export function AuthProvider({ children }) {
    * If 2FA is required, returns { requires_2fa: true } without setting token.
    * Caller (login page) handles the 2FA step and calls loginWith2fa.
    */
-  const login = async (email, password, totpCode) => {
+  const login = async (email, password, totpCode, redirect) => {
     const payload = { email, password };
     if (totpCode) {
       payload.totp_code = totpCode;
+    }
+    // VULN: Open Redirect - pass redirect param to backend
+    if (redirect) {
+      payload.redirect = redirect;
     }
     const res = await authAPI.login(payload);
 

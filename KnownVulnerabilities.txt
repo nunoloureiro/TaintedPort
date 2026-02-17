@@ -7,14 +7,20 @@
 -- -------------------------------- -----------------------------------  ----------  --------
 1  SQL Injection                   POST /auth/login (email field)      CWE-89      High
 2  SQL Injection                   GET /wines/:id (wine ID in URL)     CWE-89      High
-3  Reflected XSS                   POST /auth/login (email in error)   CWE-79      Medium
-4  Reflected XSS                   GET /wines?search= (search query)   CWE-79      Medium
-5  Stored XSS                      PUT /auth/profile (name field)      CWE-79      Medium
-6  Stored XSS                      POST /orders (shipping name)        CWE-79      Medium
-7  JWT "none" Algorithm (API2)     Authorization header (any endpoint) CWE-345     High
-8  JWT Signature Bypass (API2)    Authorization header (any endpoint) CWE-347     High
-9  Directory Listing               /files/ (both hosts)                CWE-548     Medium
-10 CSRF                            POST /orders (checkout)             CWE-352     Medium
+3  SQL Injection                   GET /wines?search= (search query)   CWE-89      High
+4  SQL Injection                   GET /wines/:id/reviews (wine ID)    CWE-89      High
+5  Blind SQL Injection             GET /orders?status= (status filter) CWE-89      High
+6  Reflected XSS                   POST /auth/login (email in error)   CWE-79      Medium
+7  Reflected XSS                   GET /wines?search= (search query)   CWE-79      Medium
+8  Stored XSS                      PUT /auth/profile (name field)      CWE-79      Medium
+9  Stored XSS                      POST /orders (shipping name)        CWE-79      Medium
+10 Stored XSS                      POST /wines/:id/reviews (comment)   CWE-79      Medium
+11 JWT "none" Algorithm (API2)     Authorization header (any endpoint)  CWE-345     High
+12 JWT Signature Bypass (API2)     Authorization header (any endpoint)  CWE-347     High
+13 Directory Listing               /files/ (both hosts)                 CWE-548     Medium
+14 Path Traversal                  GET /wines/export/:filename          CWE-22      High
+15 Open Redirect                   POST /auth/login (redirect param)    CWE-601     Medium
+16 Missing Security Headers        All endpoints (HSTS, X-Content-Type) CWE-693     Low
 
 
 DETAILED DESCRIPTIONS
@@ -23,7 +29,7 @@ DETAILED DESCRIPTIONS
 1. SQL Injection - Login Email
    Endpoint: POST /auth/login
    Parameter: email (JSON body)
-   File: backend/api/models/User.php -> findByEmailUnsafe()
+   File: backend/api/models/User.php -> authenticateUnsafe()
    Description: The email value is directly concatenated into a SQL query
    without parameterized statements. An attacker can inject SQL via the
    email field to bypass authentication or extract data.
@@ -37,7 +43,33 @@ DETAILED DESCRIPTIONS
    The route accepts non-numeric values, allowing SQL injection.
    Example: GET /wines/0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--
 
-3. Reflected XSS - Login Email
+3. SQL Injection - Wine Search
+   Endpoint: GET /wines?search=<payload>
+   Parameter: search (query string)
+   File: backend/api/models/Wine.php -> getAll()
+   Description: The search term is directly concatenated into the SQL
+   LIKE clause without parameterized statements. An attacker can inject
+   SQL via the search parameter.
+   Example: search=' UNION SELECT 1,email,password_hash,name,5,6,7,8 FROM users--
+
+4. SQL Injection - Wine Reviews
+   Endpoint: GET /wines/:id/reviews
+   Parameter: id (URL path)
+   File: backend/api/models/Review.php -> getByWineIdUnsafe()
+   Description: The wine ID is directly concatenated into the SQL query
+   when fetching reviews. An attacker can inject SQL to extract data.
+   Example: GET /wines/0 UNION SELECT 1,email,password_hash,name,5,6 FROM users--/reviews
+
+5. Blind SQL Injection - Order Status Filter
+   Endpoint: GET /orders?status=<payload>
+   Parameter: status (query string)
+   File: backend/api/models/Order.php -> getByUserFiltered()
+   Description: The order listing endpoint accepts a status filter that
+   is concatenated directly into the SQL query. This enables time-based
+   blind SQL injection since error messages are generic.
+   Example: status=pending' AND 1=CASE WHEN (SELECT length(password_hash) FROM users WHERE id=1)>50 THEN RANDOMBLOB(200000000) ELSE 1 END--
+
+6. Reflected XSS - Login Email
    Endpoint: POST /auth/login
    Parameter: email (JSON body)
    File: backend/api/controllers/AuthController.php -> login()
@@ -47,7 +79,7 @@ DETAILED DESCRIPTIONS
    email field will be reflected in the API response.
    Example: email = <script>alert(1)</script>
 
-4. Reflected XSS - Wine Search
+7. Reflected XSS - Wine Search
    Endpoint: GET /wines?search=<payload>
    Parameter: search (query string)
    File: backend/api/controllers/WineController.php -> index()
@@ -57,7 +89,7 @@ DETAILED DESCRIPTIONS
    dangerouslySetInnerHTML, enabling XSS.
    Example: search=<img src=x onerror=alert(1)>
 
-5. Stored XSS - User Name (Account Page)
+8. Stored XSS - User Name (Account Page)
    Endpoint: PUT /auth/profile
    Parameter: name (JSON body)
    File: frontend/components/Navbar.js
@@ -67,7 +99,7 @@ DETAILED DESCRIPTIONS
    and it will execute on every page load.
    Example: name = <img src=x onerror=alert(document.cookie)>
 
-6. Stored XSS - Shipping Name (Checkout)
+9. Stored XSS - Shipping Name (Checkout)
    Endpoint: POST /orders
    Parameter: shipping_address.name (JSON body)
    Frontend: frontend/app/orders/[id]/page.js
@@ -77,48 +109,81 @@ DETAILED DESCRIPTIONS
    have the XSS payload executed.
    Example: name = <script>alert('XSS')</script>
 
-7. JWT "none" Algorithm Accepted (Broken Authentication)
-   CWE: CWE-345 (Insufficient Verification of Data Authenticity)
-   OWASP API: API2:2023 Broken Authentication
-   Endpoint: Any authenticated endpoint
-   Header: Authorization: Bearer <token>
-   File: backend/api/config/jwt.php -> decode()
-   Description: The JWT decoder checks the "alg" field in the token
-   header. If alg is "none", it skips signature verification entirely
-   and accepts the token payload as valid. An attacker can forge tokens
-   by setting alg=none and providing arbitrary payload data.
-   Example: Header={"alg":"none","typ":"JWT"}, Payload={"user_id":1,"email":"admin@example.com","exp":9999999999}
+10. Stored XSS - Wine Review Comment
+    Endpoint: POST /wines/:id/reviews
+    Parameter: comment (JSON body)
+    Frontend: frontend/app/wines/[id]/page.js
+    Description: The review comment is stored without sanitization and
+    rendered on the wine detail page using dangerouslySetInnerHTML.
+    Any user viewing the wine page will have the XSS payload executed.
+    Example: comment = <img src=x onerror=alert(document.cookie)>
 
-8. JWT Signature Not Verified (Broken Authentication)
-   CWE: CWE-347 (Improper Verification of Cryptographic Signature)
-   OWASP API: API2:2023 Broken Authentication
-   Endpoint: Any authenticated endpoint
-   Header: Authorization: Bearer <token>
-   File: backend/api/config/jwt.php -> decode()
-   Description: Even for HS256 tokens, when the signature doesn't match,
-   the code only logs a warning but still accepts the token. An attacker
-   can modify the payload of any JWT token (e.g., change user_id) without
-   needing to know the secret key.
+11. JWT "none" Algorithm Accepted (Broken Authentication)
+    CWE: CWE-345 (Insufficient Verification of Data Authenticity)
+    OWASP API: API2:2023 Broken Authentication
+    Endpoint: Any authenticated endpoint
+    Header: Authorization: Bearer <token>
+    File: backend/api/config/jwt.php -> decode()
+    Description: The JWT decoder checks the "alg" field in the token
+    header. If alg is "none", it skips signature verification entirely
+    and accepts the token payload as valid. An attacker can forge tokens
+    by setting alg=none and providing arbitrary payload data.
+    Example: Header={"alg":"none","typ":"JWT"}, Payload={"user_id":1,"email":"admin@example.com","exp":9999999999}
 
-9. Directory Listing
-   URL: https://taintedport.com/files/
-   URL: https://api.taintedport.com/files/
-   File: docker/nginx.conf
-   Description: Nginx is configured with autoindex enabled on /files/,
-   which maps to the backend source directory. This exposes all PHP
-   source code, the SQLite database file, and configuration files
-   including the JWT secret. An attacker can download the database
-   and extract user credentials.
+12. JWT Signature Not Verified (Broken Authentication)
+    CWE: CWE-347 (Improper Verification of Cryptographic Signature)
+    OWASP API: API2:2023 Broken Authentication
+    Endpoint: Any authenticated endpoint
+    Header: Authorization: Bearer <token>
+    File: backend/api/config/jwt.php -> decode()
+    Description: Even for HS256 tokens, when the signature doesn't match,
+    the code only logs a warning but still accepts the token. An attacker
+    can modify the payload of any JWT token (e.g., change user_id) without
+    needing to know the secret key.
 
-10. CSRF on Checkout
-    Endpoint: POST /orders
-    File: backend/api/index.php (CORS config)
-    Description: The CORS policy reflects any Origin header back with
-    Access-Control-Allow-Credentials: true. Combined with the lack of
-    CSRF tokens, an attacker can create a malicious page that submits
-    orders on behalf of authenticated users. If the user has items in
-    their cart and visits the attacker's page, the order will be placed
-    automatically.
+13. Directory Listing
+    URL: https://taintedport.com/files/
+    URL: https://api.taintedport.com/files/
+    File: docker/nginx.conf
+    Description: Nginx is configured with autoindex enabled on /files/,
+    which maps to the backend source directory. This exposes all PHP
+    source code, the SQLite database file, and configuration files
+    including the JWT secret. An attacker can download the database
+    and extract user credentials.
+
+14. Path Traversal - Wine Export
+    CWE: CWE-22 (Improper Limitation of a Pathname to a Restricted Directory)
+    Severity: HIGH
+    Endpoint: GET /wines/export/:filename
+    File: backend/api/controllers/WineController.php -> export()
+    Description: The wine export endpoint serves files from an exports
+    directory but does not sanitize the filename parameter. An attacker
+    can use ../ sequences to traverse the directory tree and read
+    arbitrary files from the server.
+    Example: GET /wines/export/../../api/config/jwt.php (leaks JWT secret)
+    Example: GET /wines/export/../../database.db (leaks entire database)
+
+15. Open Redirect on Login
+    CWE: CWE-601 (URL Redirection to Untrusted Site)
+    Severity: MEDIUM
+    Endpoint: POST /auth/login
+    Parameter: redirect (JSON body)
+    Frontend: frontend/app/login/page.js
+    Description: The login endpoint accepts an optional redirect parameter.
+    After successful login, the frontend navigates to the provided URL
+    without validation. An attacker can craft a phishing link like
+    /login?redirect=https://evil.com that redirects users after login.
+    Example: {"email":"joe@example.com","password":"password123","redirect":"https://evil.com"}
+
+16. Missing Security Headers
+    CWE: CWE-693 (Protection Mechanism Failure)
+    Severity: LOW
+    Endpoint: All endpoints
+    Description: The application does not set critical security headers:
+    - Strict-Transport-Security (HSTS) is missing, allowing downgrade attacks
+    - X-Content-Type-Options: nosniff is missing, allowing MIME-type sniffing
+      which can amplify XSS vulnerabilities
+    These are commonly flagged by DAST scanners as security misconfigurations.
 
 
 BUSINESS LOGIC VULNERABILITIES
@@ -126,25 +191,25 @@ BUSINESS LOGIC VULNERABILITIES
 
 #  VULNERABILITY                   LOCATION                                CWE         SEVERITY
 -- -------------------------------- ---------------------------------------- ----------  --------
-11 BOLA (IDOR) on Order Details    GET /orders/:id                         CWE-639     High
-12 BOLA / Mass Assignment          PUT /auth/profile (user_id param)       CWE-639     High
-13 Price Manipulation              POST /cart/add (price param)            CWE-472     High
-14 Broken Access Control on 2FA    POST /auth/2fa/disable (user_id param)  CWE-639     High
-15 Discount Code Bypass            POST /orders (discount_code/percent)    CWE-472     High
-16 Privilege Escalation (Register) POST /auth/register (is_admin param)    CWE-915     Critical
-17 Privilege Escalation (JWT)      /admin/* (JWT claim forgery chain)      CWE-269     Critical
-18 BOPLA (Data Exposure)           GET /orders/:id (leaks user secrets)    CWE-213     High
-19 BFLA (Order Status)             PUT /orders/:id/status (is_admin body)  CWE-285     High
+17 BOLA (IDOR) on Order Details    GET /orders/:id                         CWE-639     High
+18 BOLA / Mass Assignment          PUT /auth/profile (user_id param)       CWE-639     High
+19 Price Manipulation              POST /cart/add (price param)            CWE-472     High
+20 Broken Access Control on 2FA    POST /auth/2fa/disable (user_id param)  CWE-639     High
+21 Discount Code Bypass            POST /orders (discount_code/percent)    CWE-472     High
+22 Privilege Escalation (Register) POST /auth/register (is_admin param)    CWE-915     Critical
+23 Privilege Escalation (JWT)      /admin/* (JWT claim forgery chain)      CWE-269     Critical
+24 BOPLA (Data Exposure)           GET /orders/:id (leaks user secrets)    CWE-213     High
+25 BFLA (Order Status)             PUT /orders/:id/status (is_admin body)  CWE-285     High
 
 
-11. BOLA (IDOR) on Order Details
+17. BOLA (IDOR) on Order Details
     Endpoint: GET /orders/:id
     File: backend/api/models/Order.php -> getById()
     Description: The order detail endpoint does not verify that the
     authenticated user owns the order. Any authenticated user can view
     any order by guessing or enumerating order IDs.
 
-12. BOLA / Mass Assignment on Profile Update
+18. BOLA / Mass Assignment on Profile Update
     Endpoint: PUT /auth/profile
     Parameter: user_id (JSON body)
     File: backend/api/controllers/AuthController.php -> updateProfile()
@@ -152,7 +217,7 @@ BUSINESS LOGIC VULNERABILITIES
     parameter. If provided, it updates that user's name instead of the
     authenticated user's name. An attacker can modify any user's profile.
 
-13. Price Manipulation on Cart
+19. Price Manipulation on Cart
     Endpoint: POST /cart/add
     Parameter: price (JSON body)
     File: backend/api/controllers/CartController.php -> add()
@@ -162,7 +227,7 @@ BUSINESS LOGIC VULNERABILITIES
     client-supplied value before adding to cart. An attacker can set
     any wine's price to 0.01 and buy it at that price.
 
-14. Broken Access Control on 2FA Disable
+20. Broken Access Control on 2FA Disable
     Endpoint: POST /auth/2fa/disable
     Parameter: user_id (JSON body)
     File: backend/api/controllers/AuthController.php -> disable2fa()
@@ -171,7 +236,7 @@ BUSINESS LOGIC VULNERABILITIES
     the authenticated user. An attacker can disable any user's 2FA
     by providing their user_id (only needs their own valid password).
 
-15. Discount Code Bypass
+21. Discount Code Bypass
     Endpoint: POST /orders
     Parameters: discount_code, discount_percent (JSON body)
     File: backend/api/controllers/OrderController.php -> create()
@@ -183,7 +248,7 @@ BUSINESS LOGIC VULNERABILITIES
     even negative values for credit.
 
 
-16. Privilege Escalation via Mass Assignment on Registration
+22. Privilege Escalation via Mass Assignment on Registration
     CWE: CWE-915 (Improperly Controlled Modification of Dynamically-Determined Object Attributes)
     Severity: CRITICAL
     Endpoint: POST /auth/register
@@ -195,7 +260,7 @@ BUSINESS LOGIC VULNERABILITIES
     with admin privileges. The frontend signup form does not include this field,
     but an attacker can add it via an intercepting proxy or curl.
 
-17. Privilege Escalation via JWT Claim Forgery (Vulnerability Chain)
+23. Privilege Escalation via JWT Claim Forgery (Vulnerability Chain)
     CWE: CWE-269 (Improper Privilege Management), CWE-345 (Insufficient Verification of Data Authenticity)
     Severity: CRITICAL
     Endpoint: All /admin/* endpoints
@@ -203,14 +268,14 @@ BUSINESS LOGIC VULNERABILITIES
     File: backend/api/config/jwt.php -> decode()
     Description: The admin authorization check reads the is_admin flag from
     the JWT token payload instead of the database. Combined with the existing
-    JWT vulnerabilities (#7 "none" algorithm or #8 signature bypass), an
+    JWT vulnerabilities (#11 "none" algorithm or #12 signature bypass), an
     attacker can forge a JWT token with is_admin=true to gain admin access.
-    Steps: (1) Login as any user → get a JWT token, (2) Decode the JWT
-    payload, (3) Modify is_admin to true, (4) Re-encode with alg=none or
-    any signature, (5) Use the forged token to access /admin/* endpoints.
+    Steps: (1) Login as any user, (2) Decode the JWT payload, (3) Modify
+    is_admin to true, (4) Re-encode with alg=none or any signature,
+    (5) Use the forged token to access /admin/* endpoints.
 
 
-18. BOPLA - Excessive Data Exposure on Order Details
+24. BOPLA - Excessive Data Exposure on Order Details
     CWE: CWE-213 (Exposure of Sensitive Information Due to Incompatible Policies)
     OWASP API: API3:2023 Broken Object Property Level Authorization
     Severity: HIGH
@@ -219,11 +284,11 @@ BUSINESS LOGIC VULNERABILITIES
     Description: The order detail endpoint JOINs with the users table and
     returns sensitive user properties in the response: password_hash,
     totp_secret (2FA seed), is_admin flag, and email of the order owner.
-    Combined with the existing BOLA (#11), any authenticated user can
+    Combined with the existing BOLA (#17), any authenticated user can
     retrieve any order and get the order owner's hashed password and
     2FA secret, enabling offline password cracking and 2FA bypass.
 
-19. BFLA - Broken Function Level Authorization on Order Status Update
+25. BFLA - Broken Function Level Authorization on Order Status Update
     CWE: CWE-285 (Improper Authorization)
     OWASP API: API5:2023 Broken Function Level Authorization
     Severity: HIGH

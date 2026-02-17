@@ -41,6 +41,12 @@ export const wineAPI = {
   getTypes: () => api.get('/wines/types'),
 };
 
+// Review API
+export const reviewAPI = {
+  getByWine: (wineId) => api.get(`/wines/${wineId}/reviews`),
+  create: (wineId, data) => api.post(`/wines/${wineId}/reviews`, data),
+};
+
 // Cart API
 export const cartAPI = {
   getItems: () => api.get('/cart'),

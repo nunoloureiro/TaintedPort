@@ -480,6 +480,67 @@ Disables 2FA. Requires password confirmation.
 }
 ```
 
+### Review Endpoints
+
+#### `GET /api/wines/:id/reviews`
+**Response (200):**
+```json
+{
+  "success": true,
+  "reviews": [
+    {
+      "id": 1,
+      "rating": 5,
+      "comment": "Absolutely magnificent!",
+      "user_name": "Joe Silva",
+      "created_at": "2026-01-01T00:00:00"
+    }
+  ],
+  "avg_rating": 4.5,
+  "review_count": 2
+}
+```
+
+#### `POST /api/wines/:id/reviews`
+**Headers:** `Authorization: Bearer <token>`
+**Request Body:**
+```json
+{
+  "rating": 5,
+  "comment": "Excellent wine, highly recommended!"
+}
+```
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Review submitted successfully.",
+  "review_id": 1
+}
+```
+
+#### `GET /api/wines/ratings`
+**Response (200):**
+```json
+{
+  "success": true,
+  "ratings": {
+    "1": { "avg_rating": 4.5, "review_count": 2 },
+    "3": { "avg_rating": 4.0, "review_count": 1 }
+  }
+}
+```
+
+#### `GET /api/wines/export/:filename`
+**Response (200):**
+```json
+{
+  "success": true,
+  "filename": "wines-catalog.csv",
+  "content": "id,name,region,type,vintage,price\n..."
+}
+```
+
 ### Cart & Order Endpoints
 
 #### `POST /api/cart/add`
@@ -705,6 +766,21 @@ CREATE TABLE order_items (
 );
 ```
 
+### Table: `reviews`
+```sql
+CREATE TABLE reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wine_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    comment TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (wine_id) REFERENCES wines(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(wine_id, user_id)
+);
+```
+
 ## Sample Wine Data
 
 **NOTE:** All prices are intentionally inflated (~10x real market value) to make it obvious this is not a real store. Nobody should mistake these for genuine offers.
@@ -912,40 +988,46 @@ sqlite3 database.db
 This application is intentionally vulnerable for DAST/security testing purposes. The following vulnerabilities are built in:
 
 ### SQL Injection (SQLi)
-1. **Login email field**: The login endpoint uses `findByEmailUnsafe()` which directly concatenates the email into the SQL query without parameterized statements. Exploitable via the email field on `POST /auth/login`.
+1. **Login email field**: The login endpoint uses `authenticateUnsafe()` which directly concatenates both email and password into the SQL query without parameterized statements. Exploitable via the email field on `POST /auth/login`.
 2. **Wine detail page (wine ID)**: The wine detail endpoint (`GET /wines/:id`) uses `getByIdUnsafe()` which concatenates the ID directly into SQL. The route accepts non-numeric IDs.
+3. **Wine search**: The wine search (`GET /wines?search=`) concatenates the search term directly into the SQL LIKE clause in `Wine::getAll()`.
+4. **Wine reviews**: The wine reviews endpoint (`GET /wines/:id/reviews`) uses `Review::getByWineIdUnsafe()` which concatenates the wine ID directly into SQL.
+5. **Blind SQLi on order status filter**: The order listing (`GET /orders?status=`) uses `Order::getByUserFiltered()` which concatenates the status parameter into SQL. Exploitable via time-based blind SQLi using `RANDOMBLOB()`.
 
 ### Cross-Site Scripting (XSS)
-3. **Reflected XSS on login email**: The login error message includes the raw email address without HTML encoding: `"Login failed for <email>. Please check your credentials."` The frontend should render this unsafely.
-4. **Reflected XSS on wine search**: The wine search API returns a `message` field containing the raw search query. The frontend renders it via `dangerouslySetInnerHTML`.
-5. **Stored XSS on user name (account page)**: The user's name is stored without sanitization and displayed in the Navbar via `dangerouslySetInnerHTML` (e.g., `Hi, <name>`). Change name on the account page to inject.
-6. **Stored XSS on shipping name (checkout/order detail)**: The shipping name entered at checkout is stored and displayed on the order detail page (`/orders/:id`) via `dangerouslySetInnerHTML`.
+6. **Reflected XSS on login email**: The login error message includes the raw email address without HTML encoding: `"Login failed for <email>. Please check your credentials."` The frontend should render this unsafely.
+7. **Reflected XSS on wine search**: The wine search API returns a `message` field containing the raw search query. The frontend renders it via `dangerouslySetInnerHTML`.
+8. **Stored XSS on user name (account page)**: The user's name is stored without sanitization and displayed in the Navbar via `dangerouslySetInnerHTML` (e.g., `Hi, <name>`). Change name on the account page to inject.
+9. **Stored XSS on shipping name (checkout/order detail)**: The shipping name entered at checkout is stored and displayed on the order detail page (`/orders/:id`) via `dangerouslySetInnerHTML`.
+10. **Stored XSS on wine review comment**: The review comment (`POST /wines/:id/reviews`) is stored without sanitization and rendered on the wine detail page via `dangerouslySetInnerHTML`.
 
 ### JWT / Broken Authentication (API2:2023)
-7. **JWT "none" algorithm accepted** (API2:2023 Broken Authentication): The JWT decoder accepts tokens with `alg: "none"` and skips signature verification entirely, allowing token forgery.
-8. **JWT signature not verified** (API2:2023 Broken Authentication): Even for HS256 tokens, the signature validation only logs a warning on mismatch but accepts the token anyway.
+11. **JWT "none" algorithm accepted** (API2:2023 Broken Authentication): The JWT decoder accepts tokens with `alg: "none"` and skips signature verification entirely, allowing token forgery.
+12. **JWT signature not verified** (API2:2023 Broken Authentication): Even for HS256 tokens, the signature validation only logs a warning on mismatch but accepts the token anyway.
 
 ### Server Misconfiguration
-9. **Directory listing**: Nginx serves `/files/` with `autoindex on`, exposing the backend source code and database file at both `taintedport.com/files/` and `api.taintedport.com/files/`.
-
-### Cross-Site Request Forgery (CSRF)
-10. **CSRF on checkout**: The checkout endpoint (`POST /orders`) has no CSRF token. CORS is configured to reflect any `Origin` header with `Access-Control-Allow-Credentials: true`, allowing cross-origin requests with cookies/tokens.
+13. **Directory listing**: Nginx serves `/files/` with `autoindex on`, exposing the backend source code and database file at both `taintedport.com/files/` and `api.taintedport.com/files/`.
+14. **Path traversal on wine export**: The `GET /wines/export/:filename` endpoint serves files from an exports directory but does not sanitize the filename. Using `../` sequences allows reading any file on the server (e.g., `../../api/config/jwt.php`).
+15. **Open redirect on login**: The `POST /auth/login` endpoint accepts an optional `redirect` parameter. After login, the frontend navigates to the returned `redirect_url` without validation, allowing redirection to external/malicious sites.
+16. **Missing security headers**: The backend does not set `Strict-Transport-Security` or `X-Content-Type-Options: nosniff` headers. These are commonly flagged by DAST scanners as security misconfigurations.
 
 ### Business Logic Vulnerabilities
-11. **BOLA (IDOR) on order details**: The `GET /orders/:id` endpoint does not verify that the authenticated user owns the order. Any authenticated user can view any order by enumerating IDs.
-12. **BOLA / Mass Assignment on profile update**: The `PUT /auth/profile` endpoint accepts an optional `user_id` field. If present, it updates that user's name instead of the authenticated user's.
-13. **Price manipulation on cart**: The `POST /cart/add` endpoint accepts an optional `price` field that overrides the wine's price in the database.
-14. **Broken access control on 2FA disable**: The `POST /auth/2fa/disable` endpoint accepts an optional `user_id` field. If present, it disables 2FA for that user instead of the authenticated user.
-15. **Discount code bypass**: The `POST /orders` endpoint accepts `discount_code` and `discount_percent` fields. Any non-empty code is accepted and the percent is applied without validation (100 = free, >100 = negative total).
-16. **Privilege Escalation via Mass Assignment on Registration**: The `POST /auth/register` endpoint accepts an optional `is_admin` field. If `is_admin=1` is sent, the new account is created with admin privileges. The `User::create()` method blindly passes this field to the INSERT query.
-17. **Privilege Escalation via JWT Claim Forgery (Chain)**: The `AdminController::requireAdmin()` checks the `is_admin` flag from the JWT token payload instead of the database. Combined with vulnerability #7 (JWT "none" algorithm) or #8 (signature bypass), an attacker can forge a JWT with `is_admin=true` to gain admin access. The JWT `encode()` method includes `is_admin` in the token payload on login, making the claim visible and exploitable.
-18. **BOPLA - Excessive Data Exposure on Order Details** (API3:2023): The `GET /orders/:id` endpoint JOINs with the users table and returns the order owner's `password_hash`, `totp_secret`, `is_admin`, and `email` in the response. Combined with BOLA (#11), any authenticated user can harvest credentials and 2FA secrets for all users by enumerating order IDs.
-19. **BFLA - Broken Function Level Authorization on Order Status** (API5:2023): A separate `PUT /orders/:id/status` endpoint allows any authenticated user to change order status by passing `is_admin: true` in the request body. The endpoint trusts the client-supplied `is_admin` flag instead of verifying the user's actual role.
+17. **BOLA (IDOR) on order details**: The `GET /orders/:id` endpoint does not verify that the authenticated user owns the order. Any authenticated user can view any order by enumerating IDs.
+18. **BOLA / Mass Assignment on profile update**: The `PUT /auth/profile` endpoint accepts an optional `user_id` field. If present, it updates that user's name instead of the authenticated user's.
+19. **Price manipulation on cart**: The `POST /cart/add` endpoint accepts an optional `price` field that overrides the wine's price in the database.
+20. **Broken access control on 2FA disable**: The `POST /auth/2fa/disable` endpoint accepts an optional `user_id` field. If present, it disables 2FA for that user instead of the authenticated user.
+21. **Discount code bypass**: The `POST /orders` endpoint accepts `discount_code` and `discount_percent` fields. Any non-empty code is accepted and the percent is applied without validation (100 = free, >100 = negative total).
+22. **Privilege Escalation via Mass Assignment on Registration**: The `POST /auth/register` endpoint accepts an optional `is_admin` field. If `is_admin=1` is sent, the new account is created with admin privileges. The `User::create()` method blindly passes this field to the INSERT query.
+23. **Privilege Escalation via JWT Claim Forgery (Chain)**: The `AdminController::requireAdmin()` checks the `is_admin` flag from the JWT token payload instead of the database. Combined with vulnerability #11 (JWT "none" algorithm) or #12 (signature bypass), an attacker can forge a JWT with `is_admin=true` to gain admin access. The JWT `encode()` method includes `is_admin` in the token payload on login, making the claim visible and exploitable.
+24. **BOPLA - Excessive Data Exposure on Order Details** (API3:2023): The `GET /orders/:id` endpoint JOINs with the users table and returns the order owner's `password_hash`, `totp_secret`, `is_admin`, and `email` in the response. Combined with BOLA (#17), any authenticated user can harvest credentials and 2FA secrets for all users by enumerating order IDs.
+25. **BFLA - Broken Function Level Authorization on Order Status** (API5:2023): A separate `PUT /orders/:id/status` endpoint allows any authenticated user to change order status by passing `is_admin: true` in the request body. The endpoint trusts the client-supplied `is_admin` flag instead of verifying the user's actual role.
 
 ### Implementation Notes
 - The **login page frontend** should render the server error message as-is (it already does via React state, and the backend includes unsanitized user input in the error). The email input should be `type="text"` (not `type="email"`) to allow HTML injection from the browser.
 - For **reflected XSS on login**, a DAST scanner testing the login form should detect the email being reflected in the error response body.
 - The **JWT secret** is hardcoded in `backend/api/config/jwt.php` and also exposed via directory listing.
+- The **wine review feature** requires login to submit reviews. Each user can review a wine once (1-5 stars + comment). Reviews are displayed on the wine detail page with star ratings. The comment is rendered via `dangerouslySetInnerHTML` for stored XSS.
+- The **wine listing** shows average star ratings and review count on each wine card (Amazon-style).
 - All vulnerabilities are documented in `KnownVulnerabilities.txt` and `KnownVulnerabilitiesPoC.txt` at the project root.
 
 ## Design Inspiration

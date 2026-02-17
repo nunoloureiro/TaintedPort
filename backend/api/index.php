@@ -3,13 +3,15 @@
 // CORS headers
 header('Content-Type: application/json');
 
-// VULN: CSRF - CORS allows any origin, reflecting the Origin header back
-// This enables cross-site requests with credentials
+// Permissive CORS - reflects any origin
 $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '*';
 header('Access-Control-Allow-Origin: ' . $origin);
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
+
+// VULN: Missing Security Headers - no HSTS, no X-Content-Type-Options
+// These headers are intentionally absent to be flagged by DAST scanners
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -23,6 +25,7 @@ require_once __DIR__ . '/controllers/WineController.php';
 require_once __DIR__ . '/controllers/CartController.php';
 require_once __DIR__ . '/controllers/OrderController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
+require_once __DIR__ . '/controllers/ReviewController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -100,8 +103,27 @@ try {
         $ctrl = new WineController();
         $response = $ctrl->types();
     }
+    elseif ($path === '/wines/ratings' && $method === 'GET') {
+        $ctrl = new WineController();
+        $response = $ctrl->ratings();
+    }
+    // VULN: Path Traversal - filename is not sanitized
+    elseif (preg_match('#^/wines/export/(.+)$#', $path, $matches) && $method === 'GET') {
+        $ctrl = new WineController();
+        $response = $ctrl->export($matches[1]);
+    }
+    // Wine reviews - must be BEFORE the catch-all /wines/:id route
+    elseif (preg_match('#^/wines/(.+)/reviews$#', $path, $matches) && $method === 'GET') {
+        $ctrl = new ReviewController();
+        $response = $ctrl->list($matches[1]);
+    }
+    elseif (preg_match('#^/wines/(.+)/reviews$#', $path, $matches) && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new ReviewController();
+        $response = $ctrl->create($authUser, $matches[1]);
+    }
     // VULN: SQL Injection - wine ID is not restricted to digits only
-    elseif (preg_match('#^/wines/(.+)$#', $path, $matches) && $method === 'GET' && $matches[1] !== 'regions' && $matches[1] !== 'types') {
+    elseif (preg_match('#^/wines/(.+)$#', $path, $matches) && $method === 'GET' && $matches[1] !== 'regions' && $matches[1] !== 'types' && $matches[1] !== 'ratings') {
         $ctrl = new WineController();
         $response = $ctrl->show($matches[1]);
     }
@@ -126,8 +148,6 @@ try {
         $ctrl = new CartController();
         $response = $ctrl->remove($authUser, $matches[1]);
     }
-    // VULN: CSRF - checkout endpoint has no CSRF token validation
-    // and accepts requests from any origin
     elseif ($path === '/orders' && $method === 'POST') {
         $authUser = authenticateToken();
         $ctrl = new OrderController();

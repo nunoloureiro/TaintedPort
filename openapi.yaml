@@ -32,6 +32,8 @@ tags:
     description: User registration, login, profile management, and 2FA
   - name: Wines
     description: Wine catalog browsing and search
+  - name: Reviews
+    description: Wine reviews and ratings
   - name: Cart
     description: Shopping cart management (requires auth)
   - name: Orders
@@ -145,6 +147,30 @@ components:
           type: string
         description_short:
           type: string
+        avg_rating:
+          type: number
+          format: float
+          example: 4.5
+        review_count:
+          type: integer
+          example: 3
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        user_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
 
     CartItem:
       type: object
@@ -783,6 +809,159 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /wines/ratings:
+    get:
+      tags: [Reviews]
+      summary: Get average ratings for all wines
+      operationId: getWineRatings
+      responses:
+        '200':
+          description: Average ratings per wine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  ratings:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        avg_rating:
+                          type: number
+                          format: float
+                        review_count:
+                          type: integer
+
+  /wines/export/{filename}:
+    get:
+      tags: [Wines]
+      summary: Export wine data as file (VULN - path traversal)
+      operationId: exportWines
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          description: "Filename to download from exports directory"
+          schema:
+            type: string
+          example: "wines-catalog.csv"
+      responses:
+        '200':
+          description: File content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  filename:
+                    type: string
+                  content:
+                    type: string
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /wines/{id}/reviews:
+    get:
+      tags: [Reviews]
+      summary: List reviews for a wine
+      operationId: listWineReviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Reviews for the wine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  reviews:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Review'
+                  avg_rating:
+                    type: number
+                    format: float
+                    example: 4.5
+                  review_count:
+                    type: integer
+                    example: 2
+    post:
+      tags: [Reviews]
+      summary: Submit a wine review (requires auth)
+      operationId: createWineReview
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  example: 5
+                comment:
+                  type: string
+                  example: "Excellent wine, highly recommended!"
+      responses:
+        '201':
+          description: Review submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  review_id:
+                    type: integer
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already reviewed this wine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   # ==================== Cart ====================
   /cart:
     get:
@@ -968,10 +1147,17 @@ paths:
                 $ref: '#/components/schemas/Error'
     get:
       tags: [Orders]
-      summary: List user's orders
+      summary: List user's orders (with optional status filter)
       operationId: listOrders
       security:
         - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by order status
+          schema:
+            type: string
+            enum: [pending, processing, shipped, delivered, cancelled]
       responses:
         '200':
           description: List of orders

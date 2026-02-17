@@ -13,11 +13,10 @@ class Wine {
         $sql = 'SELECT id, name, region, type, vintage, price, image_url, description_short FROM wines WHERE 1=1';
         $binds = [];
 
+        // VULN: SQL Injection - search term is concatenated directly into query
         if (!empty($params['search'])) {
-            $sql .= ' AND (name LIKE :search OR region LIKE :search2 OR producer LIKE :search3)';
-            $binds[':search'] = '%' . $params['search'] . '%';
-            $binds[':search2'] = '%' . $params['search'] . '%';
-            $binds[':search3'] = '%' . $params['search'] . '%';
+            $search = $params['search'];
+            $sql .= " AND (name LIKE '%$search%' OR region LIKE '%$search%' OR producer LIKE '%$search%')";
         }
 
         if (!empty($params['region'])) {
@@ -52,19 +51,26 @@ class Wine {
             : 'name ASC';
         $sql .= " ORDER BY $sort";
 
-        $stmt = $this->db->prepare($sql);
-        foreach ($binds as $key => $value) {
-            if (is_float($value)) {
-                $stmt->bindValue($key, $value, SQLITE3_FLOAT);
-            } else {
-                $stmt->bindValue($key, $value, SQLITE3_TEXT);
+        // VULN: When search contains SQLi, the prepare may fail
+        $stmt = @$this->db->prepare($sql);
+        if (!$stmt) {
+            // Fall back to direct query for SQLi to work
+            $result = @$this->db->query($sql);
+            if (!$result) return [];
+        } else {
+            foreach ($binds as $key => $value) {
+                if (is_float($value)) {
+                    $stmt->bindValue($key, $value, SQLITE3_FLOAT);
+                } else {
+                    $stmt->bindValue($key, $value, SQLITE3_TEXT);
+                }
             }
+            $result = $stmt->execute();
         }
 
-        $result = $stmt->execute();
         $wines = [];
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $row['price'] = floatval($row['price']);
+            $row['price'] = isset($row['price']) ? floatval($row['price']) : 0;
             $wines[] = $row;
         }
         return $wines;

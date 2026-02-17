@@ -80,6 +80,25 @@ class Order {
         return $orders;
     }
 
+    /**
+     * VULN: Blind SQL Injection - status filter is concatenated into the query.
+     * Time-based blind SQLi via RANDOMBLOB() or other heavy operations.
+     */
+    public function getByUserFiltered($userId, $status) {
+        $sql = "SELECT o.id, o.total, o.status, o.created_at as order_date,
+                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count
+                FROM orders o WHERE o.user_id = $userId AND status = '$status' ORDER BY o.created_at DESC";
+        $result = @$this->db->query($sql);
+        if (!$result) return [];
+
+        $orders = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $row['total'] = floatval($row['total']);
+            $orders[] = $row;
+        }
+        return $orders;
+    }
+
     public function getById($orderId, $userId) {
         // VULN: BOLA - user_id is not checked, any authenticated user can view any order
         // VULN: BOPLA (Excessive Data Exposure) - JOINs with users table and exposes

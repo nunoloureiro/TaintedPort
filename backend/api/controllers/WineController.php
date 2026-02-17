@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../models/Wine.php';
+require_once __DIR__ . '/../models/Review.php';
 
 class WineController {
     private $wine;
@@ -20,6 +21,19 @@ class WineController {
         ];
 
         $wines = $this->wine->getAll($params);
+
+        // Attach average ratings to each wine
+        $review = new Review();
+        $ratings = $review->getAverageRatings();
+        foreach ($wines as &$w) {
+            if (isset($ratings[$w['id']])) {
+                $w['avg_rating'] = $ratings[$w['id']]['avg_rating'];
+                $w['review_count'] = $ratings[$w['id']]['review_count'];
+            } else {
+                $w['avg_rating'] = 0;
+                $w['review_count'] = 0;
+            }
+        }
 
         $result = [
             'success' => true,
@@ -54,5 +68,37 @@ class WineController {
 
     public function types() {
         return ['success' => true, 'types' => $this->wine->getTypes()];
+    }
+
+    public function ratings() {
+        $review = new Review();
+        return ['success' => true, 'ratings' => $review->getAverageRatings()];
+    }
+
+    /**
+     * VULN: Path Traversal - filename is not sanitized, allowing ../../ sequences.
+     */
+    public function export($filename) {
+        $basePath = realpath(__DIR__ . '/../../') . '/exports/';
+
+        // VULN: No path sanitization - filename can contain ../
+        $filePath = $basePath . $filename;
+
+        if (!file_exists($filePath)) {
+            // Try without exports/ prefix for path traversal to work
+            $filePath = realpath(__DIR__ . '/../../') . '/' . $filename;
+        }
+
+        if (file_exists($filePath) && is_file($filePath)) {
+            $content = file_get_contents($filePath);
+            return [
+                'success' => true,
+                'filename' => $filename,
+                'content' => $content
+            ];
+        }
+
+        http_response_code(404);
+        return ['success' => false, 'message' => 'Export file not found.'];
     }
 }

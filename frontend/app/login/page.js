@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import Input from '@/components/Input';
@@ -9,6 +9,7 @@ import Button from '@/components/Button';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [totpCode, setTotpCode] = useState('');
@@ -38,7 +39,9 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const result = await login(form.email, form.password, needs2fa ? totpCode : undefined);
+      // VULN: Open Redirect - pass redirect param to backend and follow it
+      const redirectParam = searchParams.get('redirect') || '';
+      const result = await login(form.email, form.password, needs2fa ? totpCode : undefined, redirectParam || undefined);
 
       if (result.requires_2fa) {
         setNeeds2fa(true);
@@ -46,6 +49,11 @@ export default function LoginPage() {
         return;
       }
 
+      // VULN: Open Redirect - follow redirect_url from server response without validation
+      if (result.redirect_url) {
+        window.location.href = result.redirect_url;
+        return;
+      }
       router.push('/wines');
     } catch (err) {
       setServerError(err.response?.data?.message || 'Login failed. Please check your credentials.');
