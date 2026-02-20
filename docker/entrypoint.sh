@@ -17,6 +17,11 @@ mkdir -p /var/www/backend/data
 chown -R www-data:www-data /var/www/backend/database.db /var/www/backend/data
 
 echo "[init] Database ready."
+
+# Set admin credentials from env vars (defaults for Docker)
+export ADMIN_USER="${ADMIN_USER:-admin}"
+export ADMIN_PASS="${ADMIN_PASS:-taintedport}"
+
 echo "[init] Starting services..."
 
 exec "$@"

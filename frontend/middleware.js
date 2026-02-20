@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 
 export function middleware(request) {
   if (request.nextUrl.pathname.startsWith('/a')) {
+    const expectedUser = process.env.ADMIN_USER;
+    const expectedPass = process.env.ADMIN_PASS;
+
+    if (!expectedUser || !expectedPass) {
+      return new NextResponse('Admin area not configured. See .env.dist', {
+        status: 503,
+      });
+    }
+
     const authHeader = request.headers.get('authorization');
 
     if (authHeader) {
@@ -9,7 +18,7 @@ export function middleware(request) {
       if (scheme === 'Basic' && encoded) {
         const decoded = atob(encoded);
         const [user, pass] = decoded.split(':');
-        if (user === 'admin' && pass === 'taintedport') {
+        if (user === expectedUser && pass === expectedPass) {
           return NextResponse.next();
         }
       }
