@@ -1,0 +1,11 @@
+* Local> Rebuild and push to deploy:
+
+docker build --platform linux/amd64 -t nunoloureiro/taintedport:latest .
+docker push nunoloureiro/taintedport:latest
+
+* EC2> Update to latest version
+
+sudo docker pull nunoloureiro/taintedport:latest
+sudo docker stop taintedport; sudo docker rm taintedport
+sudo docker run -d --name taintedport --restart unless-stopped -p 127.0.0.1:8080:80 nunoloureiro/taintedport:latest
+
