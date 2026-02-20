@@ -90,7 +90,6 @@ export default function OrderDetailPage() {
           <div className="bg-dark-card border border-dark-border rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">Shipping Details</h2>
             <div className="space-y-2 text-sm">
-              {/* VULN: Stored XSS - shipping name rendered as raw HTML */}
               <p className="text-zinc-300">
                 <span className="text-zinc-500">Name:</span>{' '}
                 <span dangerouslySetInnerHTML={{ __html: order.shipping_name }} />

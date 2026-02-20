@@ -10,9 +10,6 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
-// VULN: Missing Security Headers - no HSTS, no X-Content-Type-Options
-// These headers are intentionally absent to be flagged by DAST scanners
-
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -26,6 +23,7 @@ require_once __DIR__ . '/controllers/CartController.php';
 require_once __DIR__ . '/controllers/OrderController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 require_once __DIR__ . '/controllers/ReviewController.php';
+require_once __DIR__ . '/controllers/PiCallbackController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -40,6 +38,13 @@ if (strpos($path, $basePath) === 0) {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Callback endpoint returns a GIF, not JSON — handle before the JSON router
+if ($path === '/pi-callback' && ($method === 'GET' || $method === 'POST')) {
+    $ctrl = new PiCallbackController();
+    $ctrl->callback();
+    // callback() calls exit after sending the GIF
+}
 
 // Simple router
 $response = null;
@@ -107,7 +112,6 @@ try {
         $ctrl = new WineController();
         $response = $ctrl->ratings();
     }
-    // VULN: Path Traversal - filename is not sanitized
     elseif (preg_match('#^/wines/export/(.+)$#', $path, $matches) && $method === 'GET') {
         $ctrl = new WineController();
         $response = $ctrl->export($matches[1]);
@@ -122,7 +126,6 @@ try {
         $ctrl = new ReviewController();
         $response = $ctrl->create($authUser, $matches[1]);
     }
-    // VULN: SQL Injection - wine ID is not restricted to digits only
     elseif (preg_match('#^/wines/(.+)$#', $path, $matches) && $method === 'GET' && $matches[1] !== 'regions' && $matches[1] !== 'types' && $matches[1] !== 'ratings') {
         $ctrl = new WineController();
         $response = $ctrl->show($matches[1]);
@@ -163,7 +166,6 @@ try {
         $ctrl = new OrderController();
         $response = $ctrl->show($authUser, $matches[1]);
     }
-    // VULN: BFLA - order status update trusts is_admin from request body
     elseif (preg_match('#^/orders/(\d+)/status$#', $path, $matches) && $method === 'PUT') {
         $authUser = authenticateToken();
         $ctrl = new OrderController();
@@ -184,6 +186,10 @@ try {
         $authUser = authenticateToken();
         $ctrl = new AdminController();
         $response = $ctrl->updateOrderStatus($authUser, $matches[1]);
+    }
+    elseif ($path === '/pi-log-data' && $method === 'GET') {
+        $ctrl = new PiCallbackController();
+        $response = $ctrl->logData();
     }
     else {
         http_response_code(404);

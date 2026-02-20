@@ -389,7 +389,6 @@ export default function WineDetailPage() {
                           </p>
                         </div>
                       </div>
-                      {/* VULN: Stored XSS - review comment rendered as raw HTML */}
                       {review.comment && (
                         <div
                           className="text-zinc-300 text-sm leading-relaxed mt-2"

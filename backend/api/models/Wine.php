@@ -13,7 +13,6 @@ class Wine {
         $sql = 'SELECT id, name, region, type, vintage, price, image_url, description_short FROM wines WHERE 1=1';
         $binds = [];
 
-        // VULN: SQL Injection - search term is concatenated directly into query
         if (!empty($params['search'])) {
             $search = $params['search'];
             $sql .= " AND (name LIKE '%$search%' OR region LIKE '%$search%' OR producer LIKE '%$search%')";
@@ -51,7 +50,6 @@ class Wine {
             : 'name ASC';
         $sql .= " ORDER BY $sort";
 
-        // VULN: When search contains SQLi, the prepare may fail
         $stmt = @$this->db->prepare($sql);
         if (!$stmt) {
             // Fall back to direct query for SQLi to work
@@ -88,10 +86,6 @@ class Wine {
         return $wine;
     }
 
-    /**
-     * VULN: SQL Injection - id is directly concatenated into the query.
-     * The wines table has 15 columns, so UNION SELECT needs 15 values.
-     */
     public function getByIdUnsafe($id) {
         $result = @$this->db->query("SELECT * FROM wines WHERE id = $id");
         if (!$result) return null;

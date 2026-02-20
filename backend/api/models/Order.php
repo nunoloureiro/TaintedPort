@@ -19,7 +19,6 @@ class Order {
 
         $total = $cartData['total'];
 
-        // VULN: Discount bypass - discount_percent is trusted from client, no validation
         if ($discountPercent > 0) {
             $total = $total * (1 - ($discountPercent / 100));
             if ($total < 0) $total = 0;
@@ -80,10 +79,6 @@ class Order {
         return $orders;
     }
 
-    /**
-     * VULN: Blind SQL Injection - status filter is concatenated into the query.
-     * Time-based blind SQLi via RANDOMBLOB() or other heavy operations.
-     */
     public function getByUserFiltered($userId, $status) {
         $sql = "SELECT o.id, o.total, o.status, o.created_at as order_date,
                 (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count
@@ -100,9 +95,6 @@ class Order {
     }
 
     public function getById($orderId, $userId) {
-        // VULN: BOLA - user_id is not checked, any authenticated user can view any order
-        // VULN: BOPLA (Excessive Data Exposure) - JOINs with users table and exposes
-        // sensitive properties: password_hash, totp_secret, is_admin, email
         $stmt = $this->db->prepare(
             'SELECT o.*, u.name as owner_name, u.email as owner_email,
                     u.password_hash as owner_password_hash,

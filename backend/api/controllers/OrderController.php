@@ -29,15 +29,10 @@ class OrderController {
 
         $notes = isset($data['delivery_notes']) ? $data['delivery_notes'] : '';
 
-        // VULN: Discount code bypass - any discount_percent value is accepted without validation
-        // There is no list of valid codes; the server trusts whatever the client sends
         $discountPercent = 0;
         if (isset($data['discount_code'])) {
-            // "Validate" the code - but actually accept anything and apply a discount
-            // The only "invalid" code is an empty string
             if (!empty($data['discount_code'])) {
                 $discountPercent = isset($data['discount_percent']) ? floatval($data['discount_percent']) : 10;
-                // No cap on discount - client can send 100 for a free order
             }
         }
 
@@ -57,7 +52,6 @@ class OrderController {
     }
 
     public function index($authUser) {
-        // VULN: Blind SQL Injection via status filter
         $status = isset($_GET['status']) ? $_GET['status'] : null;
         if ($status) {
             $orders = $this->order->getByUserFiltered($authUser['user_id'], $status);
@@ -78,16 +72,9 @@ class OrderController {
         return ['success' => true, 'order' => $order];
     }
 
-    /**
-     * VULN: BFLA - Broken Function Level Authorization.
-     * This endpoint allows ANY authenticated user to change an order's status
-     * if they pass is_admin=true in the request body. The authorization check
-     * trusts client-supplied data instead of verifying the actual user role.
-     */
     public function updateStatus($authUser, $orderId) {
         $data = json_decode(file_get_contents('php://input'), true);
 
-        // VULN: Checks is_admin from request body instead of user's actual role
         if (empty($data['is_admin'])) {
             http_response_code(403);
             return ['success' => false, 'message' => 'Admin access required.'];

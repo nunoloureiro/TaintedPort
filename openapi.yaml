@@ -2,10 +2,9 @@ openapi: 3.0.3
 info:
   title: TaintedPort API
   description: |
-    REST API for TaintedPort, an intentionally vulnerable Portuguese wine store
-    application designed for DAST and security testing.
+    REST API for TaintedPort, an intentionally vulnerable Portuguese wine store for security testing.
 
-    **WARNING:** This is NOT a real store. It is a deliberately vulnerable application.
+    **WARNING:** This is NOT a real store. It is a deliberately vulnerable application designed for security testing and educational purposes.
 
     ## Authentication
     Most endpoints require a JWT Bearer token obtained via the login endpoint.
@@ -839,7 +838,7 @@ paths:
   /wines/export/{filename}:
     get:
       tags: [Wines]
-      summary: Export wine data as file (VULN - path traversal)
+      summary: Export wine data as file
       operationId: exportWines
       parameters:
         - name: filename
@@ -1211,7 +1210,7 @@ paths:
   /orders/{id}/status:
     put:
       tags: [Orders]
-      summary: Update order status (BFLA - trusts is_admin from body)
+      summary: Update order status
       operationId: updateOrderStatus
       security:
         - BearerAuth: []
@@ -1235,7 +1234,7 @@ paths:
                   example: "shipped"
                 is_admin:
                   type: boolean
-                  description: "VULN: Setting this to true bypasses admin check"
+                  description: "Client-provided admin flag"
                   example: true
       responses:
         '200':

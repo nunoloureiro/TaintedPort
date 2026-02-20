@@ -9,10 +9,6 @@ class User {
         $this->db = Database::getInstance();
     }
 
-    /**
-     * VULN: Mass Assignment / Privilege Escalation - accepts optional is_admin parameter.
-     * An attacker can register with is_admin=1 to create an admin account.
-     */
     public function create($name, $email, $password, $isAdmin = 0) {
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $stmt = $this->db->prepare(
@@ -34,23 +30,12 @@ class User {
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
-    /**
-     * VULN: SQL Injection - email is directly concatenated into the query.
-     * Used by the login endpoint.
-     */
     public function findByEmailUnsafe($email) {
         $result = $this->db->query("SELECT * FROM users WHERE email = '$email'");
         if (!$result) return null;
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
-    /**
-     * VULN: SQL Injection - both email and password are concatenated into the query.
-     * With SQLi on the email field (e.g. ' OR 1=1 --), the AND password clause
-     * is commented out, bypassing authentication entirely.
-     * Normal logins: plaintext password != bcrypt hash, so this returns null
-     * and the caller falls back to the safe bcrypt verification path.
-     */
     public function authenticateUnsafe($email, $password) {
         $result = $this->db->query(
             "SELECT * FROM users WHERE email = '$email' AND password_hash = '$password'"

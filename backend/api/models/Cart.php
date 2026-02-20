@@ -41,8 +41,6 @@ class Cart {
             return false;
         }
 
-        // VULN: Price manipulation - if a custom price is provided, update the wine's price
-        // This allows a client to set any price for a wine before adding to cart
         if ($customPrice !== null) {
             $stmt = $this->db->prepare('UPDATE wines SET price = :price WHERE id = :id');
             $stmt->bindValue(':price', $customPrice, SQLITE3_FLOAT);

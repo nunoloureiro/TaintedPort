@@ -11,7 +11,6 @@ class ReviewController {
 
     /**
      * List reviews for a wine.
-     * VULN: SQL Injection on wine_id (uses getByWineIdUnsafe).
      */
     public function list($wineId) {
         $reviews = $this->review->getByWineIdUnsafe($wineId);

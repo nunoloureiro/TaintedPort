@@ -40,7 +40,6 @@ export function AuthProvider({ children }) {
     if (totpCode) {
       payload.totp_code = totpCode;
     }
-    // VULN: Open Redirect - pass redirect param to backend
     if (redirect) {
       payload.redirect = redirect;
     }

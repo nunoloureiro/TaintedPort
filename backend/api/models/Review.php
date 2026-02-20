@@ -9,9 +9,6 @@ class Review {
         $this->db = Database::getInstance();
     }
 
-    /**
-     * VULN: SQL Injection - wine_id is directly concatenated into the query.
-     */
     public function getByWineIdUnsafe($wineId) {
         $sql = "SELECT r.id, r.rating, r.comment, r.created_at, u.name as user_name
                 FROM reviews r

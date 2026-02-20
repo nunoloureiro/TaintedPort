@@ -32,7 +32,6 @@ class JWT {
 
         $headerData = json_decode(self::base64UrlDecode($header), true);
 
-        // VULN: JWT "none" algorithm - accepts tokens with alg=none and no signature
         if (isset($headerData['alg']) && strtolower($headerData['alg']) === 'none') {
             $data = json_decode(self::base64UrlDecode($payload), true);
             if (isset($data['exp']) && $data['exp'] < time()) {
@@ -41,15 +40,11 @@ class JWT {
             return $data;
         }
 
-        // VULN: JWT signature not properly verified - uses simple string comparison
-        // instead of constant-time comparison, and doesn't validate the algorithm
         $validSignature = self::base64UrlEncode(
             hash_hmac('sha256', "$header.$payload", self::$secret, true)
         );
 
-        // Accepts the token even if signature doesn't match (just logs a warning)
         if ($signature !== $validSignature) {
-            // VULN: Signature mismatch is ignored - token is accepted anyway
             error_log("JWT signature mismatch for token, but accepting anyway");
         }
 

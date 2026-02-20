@@ -35,7 +35,6 @@ class AuthController {
             return ['success' => false, 'message' => 'Email already registered.'];
         }
 
-        // VULN: Mass Assignment / Privilege Escalation - is_admin from request body is passed through
         $isAdmin = isset($data['is_admin']) ? $data['is_admin'] : 0;
         $userId = $this->user->create($data['name'], $data['email'], $data['password'], $isAdmin);
         $token = JWT::encode(['user_id' => $userId, 'email' => $data['email'], 'is_admin' => (bool)$isAdmin]);
@@ -62,17 +61,10 @@ class AuthController {
             return ['success' => false, 'message' => 'Email and password are required.'];
         }
 
-        // VULN: SQL Injection - both email and password are concatenated into the query.
-        // For normal logins, plaintext password != bcrypt hash, so authenticateUnsafe
-        // returns null and we fall through to the safe bcrypt check below.
-        // For SQLi (e.g. email = ' OR 1=1 --), the AND clause is commented out,
-        // returning the first user and bypassing auth entirely.
         $user = $this->user->authenticateUnsafe($data['email'], $data['password']);
 
         if (!$user) {
-            // Normal login path: find user by email (still vulnerable to SQLi),
-            // then verify password with bcrypt
-            // VULN: Reflected XSS - email is reflected in error message without sanitization
+            // Normal login path: find user by email, then verify password with bcrypt
             $user = $this->user->findByEmailUnsafe($data['email']);
 
             if (!$user || !$this->user->verifyPassword($data['password'], $user['password_hash'])) {
@@ -99,8 +91,6 @@ class AuthController {
             }
         }
 
-        // VULN: is_admin claim included in JWT - combined with JWT none/signature bypass,
-        // allows privilege escalation by forging a token with is_admin=true
         $isAdmin = !empty($user['is_admin']) && $user['is_admin'] == 1;
         $token = JWT::encode(['user_id' => $user['id'], 'email' => $user['email'], 'is_admin' => $isAdmin]);
 
@@ -115,7 +105,6 @@ class AuthController {
             ]
         ];
 
-        // VULN: Open Redirect - redirect URL is passed through without validation
         if (!empty($data['redirect'])) {
             $response['redirect_url'] = $data['redirect'];
         }
@@ -158,7 +147,6 @@ class AuthController {
             return ['success' => false, 'message' => 'Name must be 100 characters or less.'];
         }
 
-        // VULN: BOLA / Mass Assignment - if client sends user_id, it updates that user instead
         $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
 
         $this->user->updateName($targetUserId, $name);
@@ -337,7 +325,6 @@ class AuthController {
             return ['success' => false, 'message' => 'Invalid password.'];
         }
 
-        // VULN: IDOR - if client sends user_id, it disables 2FA for that user instead
         $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
         $this->user->disableTotp($targetUserId);
 

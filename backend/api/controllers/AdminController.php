@@ -13,10 +13,6 @@ class AdminController {
 
     /**
      * Check if the authenticated user is an admin.
-     * VULN: Privilege Escalation via JWT claim manipulation - checks is_admin from the
-     * JWT token payload instead of the database. Since the JWT "none" algorithm and
-     * signature bypass vulnerabilities allow token forgery, an attacker can craft a
-     * JWT with is_admin=true to gain admin access without being an actual admin.
      */
     private function requireAdmin($authUser) {
         if (empty($authUser['is_admin'])) {

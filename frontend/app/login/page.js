@@ -47,7 +47,6 @@ function LoginContent() {
 
     setLoading(true);
     try {
-      // VULN: Open Redirect - pass redirect param to backend and follow it
       const redirectParam = searchParams.get('redirect') || '';
       const result = await login(form.email, form.password, needs2fa ? totpCode : undefined, redirectParam || undefined);
 
@@ -57,7 +56,6 @@ function LoginContent() {
         return;
       }
 
-      // VULN: Open Redirect - follow redirect_url from server response without validation
       if (result.redirect_url) {
         window.location.href = result.redirect_url;
         return;
@@ -87,7 +85,6 @@ function LoginContent() {
         </div>
 
         <div className="bg-dark-card border border-dark-border rounded-xl p-8">
-          {/* VULN: Reflected XSS - server error rendered as raw HTML */}
           {serverError && (
             <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"
               dangerouslySetInnerHTML={{ __html: serverError }} />

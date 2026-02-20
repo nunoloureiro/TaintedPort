@@ -38,4 +38,8 @@ class Database {
     public function lastInsertRowID() {
         return $this->db->lastInsertRowID();
     }
+
+    public function changes() {
+        return $this->db->changes();
+    }
 }

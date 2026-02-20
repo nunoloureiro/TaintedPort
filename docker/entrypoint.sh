@@ -13,7 +13,8 @@ rm -f database.db
 php setup_db.php
 
 # Ensure correct permissions
-chown -R www-data:www-data /var/www/backend/database.db
+mkdir -p /var/www/backend/data
+chown -R www-data:www-data /var/www/backend/database.db /var/www/backend/data
 
 echo "[init] Database ready."
 echo "[init] Starting services..."

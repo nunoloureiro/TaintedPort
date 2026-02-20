@@ -79,7 +79,6 @@ export default function WinesCatalog() {
           <p className="text-zinc-400">
             Explore our curated selection of {wines.length} Portuguese wines
           </p>
-          {/* VULN: Reflected XSS - search message rendered as raw HTML */}
           {searchMessage && (
             <p className="text-zinc-300 mt-2" dangerouslySetInnerHTML={{ __html: searchMessage }} />
           )}

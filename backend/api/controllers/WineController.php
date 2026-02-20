@@ -41,7 +41,6 @@ class WineController {
             'total' => count($wines)
         ];
 
-        // VULN: Reflected XSS - search term is reflected without sanitization
         if (!empty($params['search'])) {
             $result['search_query'] = $params['search'];
             $result['message'] = 'Showing results for: ' . $params['search'];
@@ -51,7 +50,6 @@ class WineController {
     }
 
     public function show($id) {
-        // VULN: SQL Injection via wine ID
         $wine = $this->wine->getByIdUnsafe($id);
 
         if (!$wine) {
@@ -75,17 +73,12 @@ class WineController {
         return ['success' => true, 'ratings' => $review->getAverageRatings()];
     }
 
-    /**
-     * VULN: Path Traversal - filename is not sanitized, allowing ../../ sequences.
-     */
     public function export($filename) {
         $basePath = realpath(__DIR__ . '/../../') . '/exports/';
 
-        // VULN: No path sanitization - filename can contain ../
         $filePath = $basePath . $filename;
 
         if (!file_exists($filePath)) {
-            // Try without exports/ prefix for path traversal to work
             $filePath = realpath(__DIR__ . '/../../') . '/' . $filename;
         }
 
