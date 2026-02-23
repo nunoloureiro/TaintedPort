@@ -36,6 +36,8 @@ RUN apk add --no-cache \
 RUN docker-php-ext-install pdo pdo_sqlite
 
 # ---------- PHP backend ----------
+# NOTE: KnownVulnerabilities.txt lives on the 'solutions' branch.
+# Before building, run: git checkout solutions -- KnownVulnerabilities.txt
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 COPY KnownVulnerabilities.txt /var/www/backend/KnownVulnerabilities.txt

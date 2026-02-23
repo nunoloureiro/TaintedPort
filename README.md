@@ -31,6 +31,9 @@ The database resets automatically every time the container starts, giving you a 
 git clone <repo-url>
 cd TaintedPort
 
+# Pull files needed for Docker build (kept on a separate branch)
+git checkout solutions -- KnownVulnerabilities.txt
+
 # Local build (uses /api path-based routing)
 docker compose build
 docker compose up -d
@@ -144,6 +147,16 @@ Others can then run:
 ```bash
 docker run -p 8080:80 nunoloureiro/taintedport:latest
 ```
+
+## Solutions Branch
+
+Vulnerability documentation, exploit PoC tests, and the full application spec are kept on a separate `solutions` branch to avoid disclosure to automated scanners. To retrieve them locally:
+
+```bash
+git checkout solutions -- tests/vulns/ AppGenerator.md KnownVulnerabilities.txt KnownVulnerabilitiesPoC.txt KnownVulnerabilitiesLLM.txt
+```
+
+These files are gitignored on `main` so they won't be accidentally re-committed.
 
 ## Tech Stack
 
