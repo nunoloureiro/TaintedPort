@@ -37,3 +37,9 @@ next-env.d.ts
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
+
+# Vulnerability docs and exploit tests (kept on 'solutions' branch)
+KnownVulnerabilities*.txt
+AppGenerator.md
+tests/vulns/
+__pycache__/
