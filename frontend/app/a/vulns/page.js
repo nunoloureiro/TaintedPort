@@ -21,26 +21,23 @@ function parseSeverity(text) {
 function parseVulnerabilities(raw) {
   const lines = raw.split('\n');
   const sections = [];
-  let currentSection = null;
   let currentVuln = null;
   let summaryTable = [];
   let businessTable = [];
+  let aiTable = [];
   let notesLines = [];
   let inNotes = false;
   let inSummaryTable = false;
   let inBusinessTable = false;
-  let inBusinessSection = false;
+  let inAiTable = false;
+  let currentTableContext = 'standard';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect NOTES section
     if (line.startsWith('NOTES FOR TESTERS')) {
       inNotes = true;
-      if (currentVuln) {
-        sections.push(currentVuln);
-        currentVuln = null;
-      }
+      if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
       continue;
     }
     if (inNotes) {
@@ -49,73 +46,55 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    // Detect summary table header
-    if (line.startsWith('#  VULNERABILITY') && !inBusinessSection) {
-      inSummaryTable = true;
-      continue;
-    }
-    if (line.startsWith('-- ---') && inSummaryTable) continue;
-    if (inSummaryTable && line.trim() === '') {
-      inSummaryTable = false;
-      continue;
-    }
-
-    // Detect business logic section
     if (line.startsWith('BUSINESS LOGIC VULNERABILITIES')) {
-      inBusinessSection = true;
+      currentTableContext = 'business';
       continue;
     }
-    if (line.startsWith('#  VULNERABILITY') && inBusinessSection) {
-      inBusinessTable = true;
+    if (line.startsWith('AI SECURITY VULNERABILITIES')) {
+      currentTableContext = 'ai';
       continue;
     }
-    if (line.startsWith('-- ---') && inBusinessTable) continue;
-    if (inBusinessTable && line.trim() === '') {
+
+    if (line.startsWith('#') && line.includes('VULNERABILITY') && line.includes('LOCATION')) {
+      if (currentTableContext === 'business') inBusinessTable = true;
+      else if (currentTableContext === 'ai') inAiTable = true;
+      else inSummaryTable = true;
+      continue;
+    }
+    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable)) continue;
+
+    if ((inSummaryTable || inBusinessTable || inAiTable) && line.trim() === '') {
+      inSummaryTable = false;
       inBusinessTable = false;
+      inAiTable = false;
       continue;
     }
 
-    // Parse summary table rows
-    if (inSummaryTable && line.trim()) {
-      const match = line.match(/^(\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
+    if ((inSummaryTable || inBusinessTable || inAiTable) && line.trim()) {
+      const match = line.match(/^(\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
       if (match) {
-        summaryTable.push({
+        const entry = {
           id: match[1],
           name: match[2].trim(),
           location: match[3].trim(),
           cwe: match[4].trim(),
           severity: match[5].trim(),
-        });
+        };
+        if (inBusinessTable) businessTable.push(entry);
+        else if (inAiTable) aiTable.push(entry);
+        else summaryTable.push(entry);
       }
       continue;
     }
 
-    // Parse business table rows
-    if (inBusinessTable && line.trim()) {
-      const match = line.match(/^(\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
-      if (match) {
-        businessTable.push({
-          id: match[1],
-          name: match[2].trim(),
-          location: match[3].trim(),
-          cwe: match[4].trim(),
-          severity: match[5].trim(),
-        });
-      }
-      continue;
-    }
-
-    // Skip decorative lines
     if (line.startsWith('===') || line.startsWith('---')) continue;
     if (line.startsWith('  TaintedPort') || line.startsWith('  Use this')) continue;
     if (line.startsWith('DETAILED DESCRIPTIONS')) continue;
+    if (line.startsWith('NOTE:') && currentTableContext === 'ai') continue;
 
-    // Parse detailed vulnerability entries (numbered)
-    const vulnMatch = line.match(/^(\d+)\.\s+(.+)/);
+    const vulnMatch = line.match(/^(\d+\w?)\.\s+(.+)/);
     if (vulnMatch) {
-      if (currentVuln) {
-        sections.push(currentVuln);
-      }
+      if (currentVuln) sections.push(currentVuln);
       currentVuln = {
         id: vulnMatch[1],
         title: vulnMatch[2].trim(),
@@ -124,17 +103,14 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    // Collect detail lines for current vulnerability
     if (currentVuln && line.startsWith('   ')) {
       currentVuln.details.push(line.trimStart());
     }
   }
 
-  if (currentVuln) {
-    sections.push(currentVuln);
-  }
+  if (currentVuln) sections.push(currentVuln);
 
-  return { summaryTable, businessTable, sections, notesLines };
+  return { summaryTable, businessTable, aiTable, sections, notesLines };
 }
 
 function VulnDetail({ detail }) {
@@ -168,6 +144,10 @@ function VulnDetail({ detail }) {
       kvPairs.push({ key: 'Severity', value: line.replace('Severity:', '').trim() });
     } else if (line.startsWith('Steps:')) {
       kvPairs.push({ key: 'Steps', value: line.replace('Steps:', '').trim() });
+    } else if (line.startsWith('Location:')) {
+      kvPairs.push({ key: 'Location', value: line.replace('Location:', '').trim() });
+    } else if (line.startsWith('Detection:')) {
+      kvPairs.push({ key: 'Detection', value: line.replace('Detection:', '').trim() });
     } else if (line.startsWith('Example:')) {
       inExample = true;
       example.push(line.replace('Example:', '').trim());
@@ -316,11 +296,11 @@ export default function VulnsPage() {
     );
   }
 
-  const { summaryTable, businessTable, sections, notesLines } = parseVulnerabilities(raw);
+  const { summaryTable, businessTable, aiTable, sections, notesLines } = parseVulnerabilities(raw);
 
-  // Split sections into standard vulns (1-10) and business logic (11+)
-  const standardVulns = sections.filter(s => parseInt(s.id) <= 10);
-  const businessVulns = sections.filter(s => parseInt(s.id) >= 11);
+  const standardVulns = sections.filter(s => parseInt(s.id) <= 16);
+  const businessVulns = sections.filter(s => parseInt(s.id) >= 17 && parseInt(s.id) <= 25);
+  const aiVulns = sections.filter(s => s.id.startsWith('26'));
 
   return (
     <div className="min-h-screen bg-pattern">
@@ -332,7 +312,7 @@ export default function VulnsPage() {
           </h1>
           <p className="text-zinc-400 max-w-2xl mx-auto">
             Use this reference to verify the accuracy of your DAST scan results.
-            TaintedPort contains {summaryTable.length + businessTable.length} intentional vulnerabilities.
+            TaintedPort contains {summaryTable.length + businessTable.length + aiTable.length} intentional vulnerabilities.
           </p>
         </div>
 
@@ -399,6 +379,38 @@ export default function VulnsPage() {
           </div>
         )}
 
+        {/* AI Security Summary Table */}
+        {aiTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Security (Client-Side)
+            </h2>
+            <p className="text-zinc-500 text-sm mb-4">
+              These vulnerabilities test the security of AI/LLM-based clients (scanners, agents, assistants)
+              that process data from this application. The application itself is not vulnerable &mdash; the
+              payloads target the AI tool consuming the data.
+            </p>
+            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-dark-border bg-dark-lighter/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Detailed Descriptions - Standard */}
         {standardVulns.length > 0 && (
           <div className="mb-12">
@@ -419,6 +431,18 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {businessVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Detailed Descriptions - AI Security */}
+        {aiVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Security Details
+            </h2>
+            <div className="grid gap-4">
+              {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}
