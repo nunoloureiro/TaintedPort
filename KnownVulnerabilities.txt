@@ -29,18 +29,28 @@ DETAILED DESCRIPTIONS
 1. SQL Injection - Login Email
    Endpoint: POST /auth/login
    Parameter: email (JSON body)
-   File: backend/api/models/User.php -> authenticateUnsafe()
+   File: backend/api/models/User.php -> authenticateDirect()
    Description: The email value is directly concatenated into a SQL query
    without parameterized statements. An attacker can inject SQL via the
    email field to bypass authentication or extract data.
+   Vulnerable Code: backend/api/models/User.php line 41
+     "SELECT * FROM users WHERE email = '$email' AND password_hash = '$password'"
+   Fix: Use parameterized queries with bound parameters:
+     $stmt = $db->prepare("SELECT * FROM users WHERE email = :email");
+     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
    Example: email = ' OR 1=1 --
 
 2. SQL Injection - Wine Detail (ID)
    Endpoint: GET /wines/:id
    Parameter: id (URL path)
-   File: backend/api/models/Wine.php -> getByIdUnsafe()
+   File: backend/api/models/Wine.php -> getByIdDirect()
    Description: The wine ID is directly concatenated into a SQL query.
    The route accepts non-numeric values, allowing SQL injection.
+   Vulnerable Code: backend/api/models/Wine.php line 89
+     "SELECT * FROM wines WHERE id = $id"
+   Fix: Use a parameterized query with the id bound as an integer:
+     $stmt = $db->prepare("SELECT * FROM wines WHERE id = :id");
+     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
    Example: GET /wines/0 UNION SELECT 1,email,password_hash,name,5,6,7,8,totp_secret,is_admin,11,12,13,14,15 FROM users--
 
 3. SQL Injection - Wine Search
@@ -50,14 +60,24 @@ DETAILED DESCRIPTIONS
    Description: The search term is directly concatenated into the SQL
    LIKE clause without parameterized statements. An attacker can inject
    SQL via the search parameter.
+   Vulnerable Code: backend/api/models/Wine.php line 18
+     "AND (name LIKE '%$search%' OR region LIKE '%$search%' OR producer LIKE '%$search%')"
+   Fix: Use a parameterized query with bound wildcards:
+     $sql .= " AND (name LIKE :search OR region LIKE :search OR producer LIKE :search)";
+     $binds[':search'] = '%' . $params['search'] . '%';
    Example: search=' UNION SELECT 1,email,password_hash,name,5,6,7,8 FROM users--
 
 4. SQL Injection - Wine Reviews
    Endpoint: GET /wines/:id/reviews
    Parameter: id (URL path)
-   File: backend/api/models/Review.php -> getByWineIdUnsafe()
+   File: backend/api/models/Review.php -> getByWineId()
    Description: The wine ID is directly concatenated into the SQL query
    when fetching reviews. An attacker can inject SQL to extract data.
+   Vulnerable Code: backend/api/models/Review.php line 16
+     "WHERE r.wine_id = $wineId"
+   Fix: Use a parameterized query:
+     $stmt = $db->prepare("...WHERE r.wine_id = :wine_id...");
+     $stmt->bindValue(':wine_id', $wineId, SQLITE3_INTEGER);
    Example: GET /wines/0 UNION SELECT 1,email,password_hash,name,5,6 FROM users--/reviews
 
 5. Blind SQL Injection - Order Status Filter
@@ -67,6 +87,12 @@ DETAILED DESCRIPTIONS
    Description: The order listing endpoint accepts a status filter that
    is concatenated directly into the SQL query. This enables time-based
    blind SQL injection since error messages are generic.
+   Vulnerable Code: backend/api/models/Order.php line 85
+     "...WHERE o.user_id = $userId AND status = '$status' ORDER BY..."
+   Fix: Use a parameterized query:
+     $stmt = $db->prepare("...WHERE o.user_id = :uid AND status = :status...");
+     $stmt->bindValue(':uid', $userId, SQLITE3_INTEGER);
+     $stmt->bindValue(':status', $status, SQLITE3_TEXT);
    Example: status=pending' AND 1=CASE WHEN (SELECT length(password_hash) FROM users WHERE id=1)>50 THEN RANDOMBLOB(200000000) ELSE 1 END--
 
 6. Reflected XSS - Login Email
@@ -77,6 +103,14 @@ DETAILED DESCRIPTIONS
    address: "Login failed for <email>. Please check your credentials."
    The email is not HTML-encoded, so injecting HTML/JavaScript in the
    email field will be reflected in the API response.
+   Vulnerable Code: backend/api/controllers/AuthController.php line 72
+     'Login failed for ' . $data['email'] . '. Please check your credentials.'
+   Also: frontend/app/login/page.js line 90
+     dangerouslySetInnerHTML={{ __html: serverError }}
+   Fix: Server-side: HTML-encode the email with htmlspecialchars():
+     'Login failed for ' . htmlspecialchars($data['email']) . '...'
+   Fix: Client-side: use text rendering instead of dangerouslySetInnerHTML:
+     <div>{serverError}</div>
    Example: email = <script>alert(1)</script>
 
 7. Reflected XSS - Wine Search
@@ -87,6 +121,14 @@ DETAILED DESCRIPTIONS
    Description: The search query is returned in the API response as-is
    in a "message" field. The frontend renders this message using
    dangerouslySetInnerHTML, enabling XSS.
+   Vulnerable Code: backend/api/controllers/WineController.php line 46
+     $result['message'] = 'Showing results for: ' . $params['search'];
+   Also: frontend/app/wines/WinesCatalog.js line 83
+     <p dangerouslySetInnerHTML={{ __html: searchMessage }} />
+   Fix: Server-side: HTML-encode the search query:
+     $result['message'] = 'Showing results for: ' . htmlspecialchars($params['search']);
+   Fix: Client-side: use text rendering instead of dangerouslySetInnerHTML:
+     <p>{searchMessage}</p>
    Example: search=<img src=x onerror=alert(1)>
 
 8. Stored XSS - User Name (Account Page)
@@ -97,6 +139,10 @@ DETAILED DESCRIPTIONS
    rendered in the navigation bar using dangerouslySetInnerHTML
    ("Hi, <name>"). An attacker can set their name to a script payload
    and it will execute on every page load.
+   Vulnerable Code: frontend/components/Navbar.js line 26
+     <span dangerouslySetInnerHTML={{ __html: `Hi, ${user.name}` }} />
+   Fix: Use JSX text interpolation instead of dangerouslySetInnerHTML:
+     <span>Hi, {user.name}</span>
    Example: name = <img src=x onerror=alert(document.cookie)>
 
 9. Stored XSS - Shipping Name (Checkout)
@@ -107,6 +153,10 @@ DETAILED DESCRIPTIONS
    the database and rendered on the order detail page using
    dangerouslySetInnerHTML. Anyone viewing the order details will
    have the XSS payload executed.
+   Vulnerable Code: frontend/app/orders/[id]/page.js line 95
+     <span dangerouslySetInnerHTML={{ __html: order.shipping_name }} />
+   Fix: Use JSX text interpolation instead of dangerouslySetInnerHTML:
+     <span>{order.shipping_name}</span>
    Example: name = <script>alert('XSS')</script>
 
 10. Stored XSS - Wine Review Comment
@@ -116,6 +166,10 @@ DETAILED DESCRIPTIONS
     Description: The review comment is stored without sanitization and
     rendered on the wine detail page using dangerouslySetInnerHTML.
     Any user viewing the wine page will have the XSS payload executed.
+    Vulnerable Code: frontend/app/wines/[id]/page.js line 395
+      dangerouslySetInnerHTML={{ __html: review.comment }}
+    Fix: Use JSX text interpolation or a sanitization library (e.g. DOMPurify):
+      <div>{review.comment}</div>
     Example: comment = <img src=x onerror=alert(document.cookie)>
 
 11. JWT "none" Algorithm Accepted (Broken Authentication)
@@ -128,6 +182,14 @@ DETAILED DESCRIPTIONS
     header. If alg is "none", it skips signature verification entirely
     and accepts the token payload as valid. An attacker can forge tokens
     by setting alg=none and providing arbitrary payload data.
+    Vulnerable Code: backend/api/config/jwt.php lines 34-40
+      if (strtolower($headerData['alg']) === 'none') {
+          $data = json_decode(self::base64UrlDecode($payload), true);
+          ...
+          return $data;  // accepts token without any signature
+      }
+    Fix: Reject any token where alg is not the expected algorithm:
+      if ($headerData['alg'] !== 'HS256') { return null; }
     Example: Header={"alg":"none","typ":"JWT"}, Payload={"user_id":1,"email":"admin@example.com","exp":9999999999}
 
 12. JWT Signature Not Verified (Broken Authentication)
@@ -140,6 +202,12 @@ DETAILED DESCRIPTIONS
     the code only logs a warning but still accepts the token. An attacker
     can modify the payload of any JWT token (e.g., change user_id) without
     needing to know the secret key.
+    Vulnerable Code: backend/api/config/jwt.php lines 46-48
+      if ($signature !== $validSignature) {
+          error_log("JWT signature mismatch for token, but accepting anyway");
+      }
+    Fix: Return null (reject the token) when the signature does not match:
+      if ($signature !== $validSignature) { return null; }
 
 13. Directory Listing
     URL: https://taintedport.com/files/
@@ -150,6 +218,14 @@ DETAILED DESCRIPTIONS
     source code, the SQLite database file, and configuration files
     including the JWT secret. An attacker can download the database
     and extract user credentials.
+    Vulnerable Code: docker/nginx.conf lines 47 and 79
+      location /files/ {
+          alias /var/www/backend/;
+          autoindex on;
+      }
+    Fix: Remove the autoindex directive or set it to off:
+      autoindex off;
+    Or remove the /files/ location block entirely.
 
 14. Path Traversal - Wine Export
     CWE: CWE-22 (Improper Limitation of a Pathname to a Restricted Directory)
@@ -160,6 +236,12 @@ DETAILED DESCRIPTIONS
     directory but does not sanitize the filename parameter. An attacker
     can use ../ sequences to traverse the directory tree and read
     arbitrary files from the server.
+    Vulnerable Code: backend/api/controllers/WineController.php line 79
+      $filePath = $basePath . $filename;
+    Fix: Use basename() to strip directory traversal sequences:
+      $filename = basename($filename);
+      $filePath = $basePath . $filename;
+    Or validate that realpath($filePath) starts with $basePath.
     Example: GET /wines/export/../../api/config/jwt.php (leaks JWT secret)
     Example: GET /wines/export/../../database.db (leaks entire database)
 
@@ -173,6 +255,14 @@ DETAILED DESCRIPTIONS
     After successful login, the frontend navigates to the provided URL
     without validation. An attacker can craft a phishing link like
     /login?redirect=https://evil.com that redirects users after login.
+    Vulnerable Code: backend/api/controllers/AuthController.php line 109
+      $response['redirect_url'] = $data['redirect'];
+    Also: frontend/app/login/page.js
+      window.location.href = result.redirect_url;
+    Fix: Validate the redirect URL is a relative path or same-origin:
+      if (parse_url($data['redirect'], PHP_URL_HOST) === null) {
+          $response['redirect_url'] = $data['redirect'];
+      }
     Example: {"email":"joe@example.com","password":"password123","redirect":"https://evil.com"}
 
 16. Missing Security Headers
@@ -184,6 +274,12 @@ DETAILED DESCRIPTIONS
     - X-Content-Type-Options: nosniff is missing, allowing MIME-type sniffing
       which can amplify XSS vulnerabilities
     These are commonly flagged by DAST scanners as security misconfigurations.
+    Vulnerable Code: docker/nginx.conf (entire http block) and
+      backend/api/index.php lines 4-11 (only sets CORS and Content-Type)
+    Fix: Add security headers in nginx.conf or backend:
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-Frame-Options "DENY" always;
 
 
 BUSINESS LOGIC VULNERABILITIES
@@ -208,6 +304,11 @@ BUSINESS LOGIC VULNERABILITIES
     Description: The order detail endpoint does not verify that the
     authenticated user owns the order. Any authenticated user can view
     any order by guessing or enumerating order IDs.
+    Vulnerable Code: backend/api/models/Order.php line 104
+      WHERE o.id = :id
+      (the $userId parameter is accepted but never used in the query)
+    Fix: Add user ownership check to the WHERE clause:
+      WHERE o.id = :id AND o.user_id = :user_id
 
 18. BOLA / Mass Assignment on Profile Update
     Endpoint: PUT /auth/profile
@@ -216,6 +317,10 @@ BUSINESS LOGIC VULNERABILITIES
     Description: The profile update endpoint accepts an optional user_id
     parameter. If provided, it updates that user's name instead of the
     authenticated user's name. An attacker can modify any user's profile.
+    Vulnerable Code: backend/api/controllers/AuthController.php line 150
+      $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
+    Fix: Always use the authenticated user's ID, ignore client-supplied user_id:
+      $targetUserId = $authUser['user_id'];
 
 19. Price Manipulation on Cart
     Endpoint: POST /cart/add
@@ -226,6 +331,15 @@ BUSINESS LOGIC VULNERABILITIES
     If provided, it updates the wine's price in the database to the
     client-supplied value before adding to cart. An attacker can set
     any wine's price to 0.01 and buy it at that price.
+    Vulnerable Code: backend/api/controllers/CartController.php line 32
+      $customPrice = isset($data['price']) ? floatval($data['price']) : null;
+    Also: backend/api/models/Cart.php lines 44-48
+      if ($customPrice !== null) {
+          $stmt = $db->prepare('UPDATE wines SET price = :price WHERE id = :id');
+          ...
+      }
+    Fix: Remove the $customPrice parameter entirely. Always use the
+    database price; never accept pricing from the client.
 
 20. Broken Access Control on 2FA Disable
     Endpoint: POST /auth/2fa/disable
@@ -235,6 +349,10 @@ BUSINESS LOGIC VULNERABILITIES
     parameter. If provided, it disables 2FA for that user instead of
     the authenticated user. An attacker can disable any user's 2FA
     by providing their user_id (only needs their own valid password).
+    Vulnerable Code: backend/api/controllers/AuthController.php line 328
+      $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
+    Fix: Always use the authenticated user's ID:
+      $targetUserId = $authUser['user_id'];
 
 21. Discount Code Bypass
     Endpoint: POST /orders
@@ -246,6 +364,15 @@ BUSINESS LOGIC VULNERABILITIES
     as valid, and discount_percent is applied directly without validation.
     An attacker can send discount_percent=100 for a free order, or
     even negative values for credit.
+    Vulnerable Code: backend/api/controllers/OrderController.php lines 32-36
+      if (isset($data['discount_code'])) {
+          if (!empty($data['discount_code'])) {
+              $discountPercent = isset($data['discount_percent']) ? floatval($data['discount_percent']) : 10;
+          }
+      }
+    Fix: Validate discount codes against a server-side database table
+    of valid codes, each with a fixed percentage. Never accept the
+    discount percentage from the client.
 
 
 22. Privilege Escalation via Mass Assignment on Registration
@@ -259,6 +386,10 @@ BUSINESS LOGIC VULNERABILITIES
     in the request body. If is_admin=1 is sent, the new account is created
     with admin privileges. The frontend signup form does not include this field,
     but an attacker can add it via an intercepting proxy or curl.
+    Vulnerable Code: backend/api/controllers/AuthController.php line 38
+      $isAdmin = isset($data['is_admin']) ? $data['is_admin'] : 0;
+    Fix: Hardcode isAdmin to 0 for all registrations; never accept it from input:
+      $isAdmin = 0;
 
 23. Privilege Escalation via JWT Claim Forgery (Vulnerability Chain)
     CWE: CWE-269 (Improper Privilege Management), CWE-345 (Insufficient Verification of Data Authenticity)
@@ -270,6 +401,12 @@ BUSINESS LOGIC VULNERABILITIES
     the JWT token payload instead of the database. Combined with the existing
     JWT vulnerabilities (#11 "none" algorithm or #12 signature bypass), an
     attacker can forge a JWT token with is_admin=true to gain admin access.
+    Vulnerable Code: backend/api/controllers/AdminController.php line 18
+      if (empty($authUser['is_admin'])) { ... }
+      ($authUser comes from JWT decode, not from database lookup)
+    Fix: Look up admin status from the database using the user ID from JWT:
+      $user = $this->user->findById($authUser['user_id']);
+      if (empty($user['is_admin'])) { http_response_code(403); ... }
     Steps: (1) Login as any user, (2) Decode the JWT payload, (3) Modify
     is_admin to true, (4) Re-encode with alg=none or any signature,
     (5) Use the forged token to access /admin/* endpoints.
@@ -287,6 +424,14 @@ BUSINESS LOGIC VULNERABILITIES
     Combined with the existing BOLA (#17), any authenticated user can
     retrieve any order and get the order owner's hashed password and
     2FA secret, enabling offline password cracking and 2FA bypass.
+    Vulnerable Code: backend/api/models/Order.php lines 99-101
+      SELECT o.*, u.name as owner_name, u.email as owner_email,
+             u.password_hash as owner_password_hash,
+             u.totp_secret as owner_totp_secret,
+             u.is_admin as owner_is_admin
+    Fix: Only SELECT the fields needed for display (name, email):
+      SELECT o.*, u.name as owner_name, u.email as owner_email
+    Never expose password_hash, totp_secret, or is_admin in API responses.
 
 25. BFLA - Broken Function Level Authorization on Order Status Update
     CWE: CWE-285 (Improper Authorization)
@@ -301,6 +446,15 @@ BUSINESS LOGIC VULNERABILITIES
     request body. Any authenticated user can change any order's status
     (pending, processing, shipped, delivered, cancelled) by simply
     including "is_admin": true in their request.
+    Vulnerable Code: backend/api/controllers/OrderController.php lines 78-81
+      if (empty($data['is_admin'])) {
+          http_response_code(403);
+          return ['success' => false, 'message' => 'Admin access required.'];
+      }
+    Fix: Check admin status from the authenticated user (JWT or database),
+    not from the request body:
+      if (empty($authUser['is_admin'])) { ... }
+    Or better: look up the user's role from the database.
 
 
 AI SECURITY VULNERABILITIES

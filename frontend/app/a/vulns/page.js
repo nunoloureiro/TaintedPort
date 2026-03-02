@@ -114,49 +114,49 @@ function parseVulnerabilities(raw) {
 }
 
 function VulnDetail({ detail }) {
-  // Parse key-value pairs from detail lines
   const kvPairs = [];
   let description = [];
   let example = [];
-  let inDesc = false;
-  let inExample = false;
+  let vulnCode = [];
+  let fixLines = [];
+  let currentBlock = null;
+
+  const singleLineKeys = [
+    'Endpoint', 'Parameter', 'Parameters', 'Header', 'File', 'Frontend',
+    'URL', 'CWE', 'OWASP API', 'OWASP', 'Severity', 'Steps', 'Location', 'Detection', 'Also',
+  ];
 
   for (const line of detail.details) {
-    if (line.startsWith('Endpoint:')) {
-      kvPairs.push({ key: 'Endpoint', value: line.replace('Endpoint:', '').trim() });
-    } else if (line.startsWith('Parameter:')) {
-      kvPairs.push({ key: 'Parameter', value: line.replace('Parameter:', '').trim() });
-    } else if (line.startsWith('Parameters:')) {
-      kvPairs.push({ key: 'Parameters', value: line.replace('Parameters:', '').trim() });
-    } else if (line.startsWith('Header:')) {
-      kvPairs.push({ key: 'Header', value: line.replace('Header:', '').trim() });
-    } else if (line.startsWith('File:')) {
-      kvPairs.push({ key: 'File', value: line.replace('File:', '').trim() });
-    } else if (line.startsWith('Frontend:')) {
-      kvPairs.push({ key: 'Frontend', value: line.replace('Frontend:', '').trim() });
-    } else if (line.startsWith('URL:')) {
-      kvPairs.push({ key: 'URL', value: line.replace('URL:', '').trim() });
-    } else if (line.startsWith('CWE:')) {
-      kvPairs.push({ key: 'CWE', value: line.replace('CWE:', '').trim() });
-    } else if (line.startsWith('OWASP API:')) {
-      kvPairs.push({ key: 'OWASP API', value: line.replace('OWASP API:', '').trim() });
-    } else if (line.startsWith('Severity:')) {
-      kvPairs.push({ key: 'Severity', value: line.replace('Severity:', '').trim() });
-    } else if (line.startsWith('Steps:')) {
-      kvPairs.push({ key: 'Steps', value: line.replace('Steps:', '').trim() });
-    } else if (line.startsWith('Location:')) {
-      kvPairs.push({ key: 'Location', value: line.replace('Location:', '').trim() });
-    } else if (line.startsWith('Detection:')) {
-      kvPairs.push({ key: 'Detection', value: line.replace('Detection:', '').trim() });
-    } else if (line.startsWith('Example:')) {
-      inExample = true;
-      example.push(line.replace('Example:', '').trim());
+    let matched = false;
+    for (const key of singleLineKeys) {
+      if (line.startsWith(key + ':')) {
+        currentBlock = null;
+        kvPairs.push({ key, value: line.replace(key + ':', '').trim() });
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+
+    if (line.startsWith('Vulnerable Code:')) {
+      currentBlock = 'vulnCode';
+      vulnCode.push(line.replace('Vulnerable Code:', '').trim());
+    } else if (line.startsWith('Fix:')) {
+      currentBlock = 'fix';
+      fixLines.push(line.replace('Fix:', '').trim());
     } else if (line.startsWith('Description:')) {
-      inDesc = true;
+      currentBlock = 'desc';
       description.push(line.replace('Description:', '').trim());
-    } else if (inExample) {
+    } else if (line.startsWith('Example:')) {
+      currentBlock = 'example';
+      example.push(line.replace('Example:', '').trim());
+    } else if (currentBlock === 'vulnCode') {
+      vulnCode.push(line);
+    } else if (currentBlock === 'fix') {
+      fixLines.push(line);
+    } else if (currentBlock === 'example') {
       example.push(line);
-    } else if (inDesc) {
+    } else if (currentBlock === 'desc') {
       description.push(line);
     }
   }
@@ -185,6 +185,24 @@ function VulnDetail({ detail }) {
         <p className="text-zinc-400 text-sm leading-relaxed mb-3">
           {description.join(' ')}
         </p>
+      )}
+
+      {vulnCode.length > 0 && (
+        <div className="mt-3">
+          <span className="text-xs text-red-400 uppercase tracking-wider font-medium">Vulnerable Code</span>
+          <pre className="mt-1 bg-dark-lighter border border-red-500/20 rounded-lg px-4 py-2 text-xs text-red-300 font-mono overflow-x-auto">
+            {vulnCode.filter(l => l).join('\n')}
+          </pre>
+        </div>
+      )}
+
+      {fixLines.length > 0 && (
+        <div className="mt-3">
+          <span className="text-xs text-emerald-400 uppercase tracking-wider font-medium">Fix</span>
+          <pre className="mt-1 bg-dark-lighter border border-emerald-500/20 rounded-lg px-4 py-2 text-xs text-emerald-300 font-mono overflow-x-auto whitespace-pre-wrap">
+            {fixLines.filter(l => l).join('\n')}
+          </pre>
+        </div>
       )}
 
       {example.length > 0 && (
