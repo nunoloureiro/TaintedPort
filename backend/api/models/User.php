@@ -30,13 +30,13 @@ class User {
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
-    public function findByEmailUnsafe($email) {
+    public function findByEmailDirect($email) {
         $result = $this->db->query("SELECT * FROM users WHERE email = '$email'");
         if (!$result) return null;
         return $result->fetchArray(SQLITE3_ASSOC);
     }
 
-    public function authenticateUnsafe($email, $password) {
+    public function authenticateDirect($email, $password) {
         $result = $this->db->query(
             "SELECT * FROM users WHERE email = '$email' AND password_hash = '$password'"
         );

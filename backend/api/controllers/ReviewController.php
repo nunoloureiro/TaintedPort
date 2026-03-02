@@ -13,7 +13,7 @@ class ReviewController {
      * List reviews for a wine.
      */
     public function list($wineId) {
-        $reviews = $this->review->getByWineIdUnsafe($wineId);
+        $reviews = $this->review->getByWineId($wineId);
 
         // Calculate average
         $totalRating = 0;
