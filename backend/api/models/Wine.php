@@ -52,7 +52,6 @@ class Wine {
 
         $stmt = @$this->db->prepare($sql);
         if (!$stmt) {
-            // Fall back to direct query for SQLi to work
             $result = @$this->db->query($sql);
             if (!$result) return [];
         } else {
@@ -86,7 +85,7 @@ class Wine {
         return $wine;
     }
 
-    public function getByIdUnsafe($id) {
+    public function getByIdDirect($id) {
         $result = @$this->db->query("SELECT * FROM wines WHERE id = $id");
         if (!$result) return null;
         $wine = $result->fetchArray(SQLITE3_ASSOC);

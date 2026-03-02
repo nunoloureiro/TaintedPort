@@ -9,7 +9,7 @@ class Review {
         $this->db = Database::getInstance();
     }
 
-    public function getByWineIdUnsafe($wineId) {
+    public function getByWineId($wineId) {
         $sql = "SELECT r.id, r.rating, r.comment, r.created_at, u.name as user_name
                 FROM reviews r
                 JOIN users u ON r.user_id = u.id

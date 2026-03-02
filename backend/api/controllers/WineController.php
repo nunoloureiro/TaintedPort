@@ -50,7 +50,7 @@ class WineController {
     }
 
     public function show($id) {
-        $wine = $this->wine->getByIdUnsafe($id);
+        $wine = $this->wine->getByIdDirect($id);
 
         if (!$wine) {
             http_response_code(404);
