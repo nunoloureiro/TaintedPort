@@ -148,16 +148,6 @@ Others can then run:
 docker run -p 8080:80 nunoloureiro/taintedport:latest
 ```
 
-## Solutions Branch
-
-Vulnerability documentation, exploit PoC tests, and the full application spec are kept on a separate `solutions` branch to avoid disclosure to automated scanners. To retrieve them locally:
-
-```bash
-git checkout solutions -- tests/vulns/ AppGenerator.md KnownVulnerabilities.txt KnownVulnerabilitiesPoC.txt KnownVulnerabilitiesLLM.txt
-```
-
-These files are gitignored on `main` so they won't be accidentally re-committed.
-
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (standalone) + Tailwind CSS 3
