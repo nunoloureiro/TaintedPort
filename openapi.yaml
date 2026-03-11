@@ -835,6 +835,62 @@ paths:
                         review_count:
                           type: integer
 
+  /wines/import-url:
+    post:
+      tags: [Wines]
+      summary: Import wine data from external URL
+      description: |
+        Fetches wine data from an external URL and returns the parsed content.
+        Accepts any URL including remote HTTP endpoints or local file paths.
+      operationId: importWineFromUrl
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  description: URL to fetch wine data from
+                  example: "https://example.com/wines.json"
+      responses:
+        '200':
+          description: Content fetched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  imported:
+                    type: object
+                    description: Parsed wine data (if valid JSON)
+                  raw_content:
+                    type: string
+                    description: Raw content (if not valid JSON)
+                  url:
+                    type: string
+        '400':
+          description: Missing URL or fetch failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /wines/export/{filename}:
     get:
       tags: [Wines]

@@ -112,6 +112,11 @@ try {
         $ctrl = new WineController();
         $response = $ctrl->ratings();
     }
+    elseif ($path === '/wines/import-url' && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new WineController();
+        $response = $ctrl->importFromUrl($authUser);
+    }
     elseif (preg_match('#^/wines/export/(.+)$#', $path, $matches) && $method === 'GET') {
         $ctrl = new WineController();
         $response = $ctrl->export($matches[1]);

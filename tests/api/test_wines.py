@@ -79,3 +79,37 @@ def test_types(base_url):
     data = r.json()
     assert data["success"] is True
     assert "Red" in data["types"]
+
+
+def test_import_url_requires_auth(base_url):
+    r = requests.post(f"{base_url}/wines/import-url", json={"url": "http://example.com"})
+    assert r.status_code == 401
+
+
+def test_import_url_requires_url_param(base_url, auth_header):
+    r = requests.post(f"{base_url}/wines/import-url", json={}, headers=auth_header)
+    assert r.status_code == 400
+    assert r.json()["success"] is False
+
+
+def test_import_url_fetches_json(base_url, auth_header):
+    r = requests.post(
+        f"{base_url}/wines/import-url",
+        json={"url": "https://httpbin.org/json"},
+        headers=auth_header,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+
+
+def test_import_url_returns_raw_for_non_json(base_url, auth_header):
+    r = requests.post(
+        f"{base_url}/wines/import-url",
+        json={"url": "https://httpbin.org/html"},
+        headers=auth_header,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert "raw_content" in data
