@@ -41,5 +41,6 @@ next-env.d.ts
 # Vulnerability docs and exploit tests (kept on 'solutions' branch)
 KnownVulnerabilities*.txt
 AppGenerator.md
+DeployInstructions.txt
 tests/vulns/
 __pycache__/
