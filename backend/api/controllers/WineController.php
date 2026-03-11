@@ -73,6 +73,40 @@ class WineController {
         return ['success' => true, 'ratings' => $review->getAverageRatings()];
     }
 
+    public function importFromUrl($authUser) {
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (empty($data['url'])) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'URL is required.'];
+        }
+
+        $content = @file_get_contents($data['url']);
+
+        if ($content === false) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'Failed to fetch content from URL.'];
+        }
+
+        $wineData = json_decode($content, true);
+
+        if ($wineData === null) {
+            return [
+                'success' => true,
+                'message' => 'Content fetched but is not valid JSON wine data.',
+                'raw_content' => $content,
+                'url' => $data['url']
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Wine data imported successfully.',
+            'imported' => $wineData,
+            'url' => $data['url']
+        ];
+    }
+
     public function export($filename) {
         $basePath = realpath(__DIR__ . '/../../') . '/exports/';
 

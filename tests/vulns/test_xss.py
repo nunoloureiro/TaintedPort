@@ -85,3 +85,33 @@ class TestStoredXSSReview:
         reviews = r.json()["reviews"]
         found = any(SCRIPT_PAYLOAD in rev.get("comment", "") for rev in reviews)
         assert found, "XSS payload was sanitized in review comment"
+
+
+class TestReflectedXSSContact:
+    """#29 - Server-side reflected XSS on POST /contact/preview"""
+
+    def test_vuln_29_reflected_xss_contact_name(self, base_url):
+        """XSS in name field is reflected unescaped in the HTML response."""
+        r = requests.post(f"{base_url}/contact/preview", data={
+            "name": XSS_PAYLOAD,
+            "email": "test@test.com",
+            "subject": "Test",
+            "message": "Hello",
+        })
+        assert r.headers.get("Content-Type", "").startswith("text/html"), \
+            "Expected HTML response from contact preview"
+        assert XSS_PAYLOAD in r.text, \
+            "XSS payload was sanitized in contact preview name field"
+
+    def test_vuln_29_reflected_xss_contact_all_fields(self, base_url):
+        """XSS payloads in all four fields are reflected unescaped."""
+        payloads = {
+            "name": '<img src=x onerror=alert("n")>',
+            "email": '<img src=x onerror=alert("e")>',
+            "subject": '<img src=x onerror=alert("s")>',
+            "message": '<img src=x onerror=alert("m")>',
+        }
+        r = requests.post(f"{base_url}/contact/preview", data=payloads)
+        for field, payload in payloads.items():
+            assert payload in r.text, \
+                f"XSS payload was sanitized in contact preview {field} field"

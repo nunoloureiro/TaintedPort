@@ -24,6 +24,7 @@ require_once __DIR__ . '/controllers/OrderController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 require_once __DIR__ . '/controllers/ReviewController.php';
 require_once __DIR__ . '/controllers/PiCallbackController.php';
+require_once __DIR__ . '/controllers/ContactController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -38,6 +39,12 @@ if (strpos($path, $basePath) === 0) {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Contact preview returns HTML, not JSON — handle before the JSON router
+if ($path === '/contact/preview' && $method === 'POST') {
+    $ctrl = new ContactController();
+    $ctrl->preview();
+}
 
 // Callback endpoint returns a GIF, not JSON — handle before the JSON router
 if ($path === '/pi-callback' && ($method === 'GET' || $method === 'POST')) {
@@ -111,6 +118,11 @@ try {
     elseif ($path === '/wines/ratings' && $method === 'GET') {
         $ctrl = new WineController();
         $response = $ctrl->ratings();
+    }
+    elseif ($path === '/wines/import-url' && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new WineController();
+        $response = $ctrl->importFromUrl($authUser);
     }
     elseif (preg_match('#^/wines/export/(.+)$#', $path, $matches) && $method === 'GET') {
         $ctrl = new WineController();

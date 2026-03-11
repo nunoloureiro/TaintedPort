@@ -316,9 +316,13 @@ export default function VulnsPage() {
 
   const { summaryTable, businessTable, aiTable, sections, notesLines } = parseVulnerabilities(raw);
 
-  const standardVulns = sections.filter(s => parseInt(s.id) <= 16);
-  const businessVulns = sections.filter(s => parseInt(s.id) >= 17 && parseInt(s.id) <= 25);
-  const aiVulns = sections.filter(s => s.id.startsWith('26'));
+  const standardIds = new Set(summaryTable.map(v => v.id));
+  const businessIds = new Set(businessTable.map(v => v.id));
+  const aiIds = new Set(aiTable.map(v => v.id));
+
+  const standardVulns = sections.filter(s => standardIds.has(s.id));
+  const businessVulns = sections.filter(s => businessIds.has(s.id));
+  const aiVulns = sections.filter(s => aiIds.has(s.id));
 
   return (
     <div className="min-h-screen bg-pattern">

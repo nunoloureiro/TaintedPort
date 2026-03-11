@@ -31,6 +31,9 @@ export default function Navbar() {
             <Link href="/about" className="text-zinc-400 hover:text-white transition-colors">
               About
             </Link>
+            <Link href="/contact" className="text-zinc-400 hover:text-white transition-colors">
+              Contact
+            </Link>
 
             {user ? (
               <>
@@ -98,6 +101,9 @@ export default function Navbar() {
             </Link>
             <Link href="/about" className="block px-3 py-2 text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>
               About
+            </Link>
+            <Link href="/contact" className="block px-3 py-2 text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>
+              Contact
             </Link>
             {user ? (
               <>

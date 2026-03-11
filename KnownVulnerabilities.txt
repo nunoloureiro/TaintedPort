@@ -20,7 +20,8 @@
 13 Directory Listing               /files/ (both hosts)                 CWE-548     Medium
 14 Path Traversal                  GET /wines/export/:filename          CWE-22      High
 15 Open Redirect                   POST /auth/login (redirect param)    CWE-601     Medium
-16 Missing Security Headers        All endpoints (HSTS, X-Content-Type) CWE-693     Low
+16 Missing Security Headers        All endpoints (HSTS, X-Content-Type)  CWE-693     Low
+29 Reflected XSS (Server-Side)     POST /contact/preview (all fields)    CWE-79      Medium
 
 
 DETAILED DESCRIPTIONS
@@ -281,6 +282,30 @@ DETAILED DESCRIPTIONS
       add_header X-Content-Type-Options "nosniff" always;
       add_header X-Frame-Options "DENY" always;
 
+29. Reflected XSS - Contact Form Preview (Server-Side)
+    CWE: CWE-79 (Improper Neutralization of Input During Web Page Generation)
+    Severity: MEDIUM
+    Endpoint: POST /contact/preview
+    Parameters: name, email, subject, message (form body)
+    File: backend/api/controllers/ContactController.php -> preview()
+    Description: The contact form preview endpoint receives form data via
+    a standard HTML form POST (application/x-www-form-urlencoded) and renders
+    an HTML confirmation page with the form values embedded directly in the
+    HTML without escaping. Unlike the other XSS vulnerabilities in this app
+    (which are DOM-based via dangerouslySetInnerHTML), this is a traditional
+    server-side reflected XSS: the PHP backend generates HTML with unsanitized
+    user input, and the browser renders it as part of the page. All four form
+    fields (name, email, subject, message) are vulnerable.
+    Vulnerable Code: backend/api/controllers/ContactController.php
+      $name = isset($_POST['name']) ? $_POST['name'] : '';
+      ...
+      echo "<div class=\"value\">$name</div>";
+      (form values interpolated directly into HTML without htmlspecialchars)
+    Fix: HTML-encode all user input before embedding in the page:
+      $name = htmlspecialchars($_POST['name'] ?? '', ENT_QUOTES, 'UTF-8');
+      $email = htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8');
+    Example: name=<script>alert(document.cookie)</script>
+
 
 BUSINESS LOGIC VULNERABILITIES
 ==============================
@@ -292,10 +317,12 @@ BUSINESS LOGIC VULNERABILITIES
 19 Price Manipulation              POST /cart/add (price param)            CWE-472     High
 20 Broken Access Control on 2FA    POST /auth/2fa/disable (user_id param)  CWE-639     High
 21 Discount Code Bypass            POST /orders (discount_code/percent)    CWE-472     High
-22 Privilege Escalation (Register) POST /auth/register (is_admin param)    CWE-915     Critical
+22 Privilege Escalation (Register)  POST /auth/register (is_admin param)   CWE-915     Critical
 23 Privilege Escalation (JWT)      /admin/* (JWT claim forgery chain)      CWE-269     Critical
 24 BOPLA (Data Exposure)           GET /orders/:id (leaks user secrets)    CWE-213     High
 25 BFLA (Order Status)             PUT /orders/:id/status (is_admin body)  CWE-285     High
+27 SSRF via Wine Import (Chain)    POST /wines/import-url (url param)      CWE-918     High
+28 SQLi->TOTP->2FA Bypass (Chain)  GET /wines?search= + POST /auth/login   CWE-89      Critical
 
 
 17. BOLA (IDOR) on Order Details
@@ -455,6 +482,55 @@ BUSINESS LOGIC VULNERABILITIES
     not from the request body:
       if (empty($authUser['is_admin'])) { ... }
     Or better: look up the user's role from the database.
+
+
+27. SSRF via Wine Import URL -> JWT Secret -> Admin Token Forgery (Vulnerability Chain)
+    CWE: CWE-918 (Server-Side Request Forgery)
+    Severity: HIGH
+    Endpoint: POST /wines/import-url
+    Parameter: url (JSON body)
+    File: backend/api/controllers/WineController.php -> importFromUrl()
+    Description: The wine import endpoint fetches content from a user-supplied
+    URL using file_get_contents(), which supports file://, http://, and other
+    PHP stream wrappers. An attacker can read arbitrary local files by
+    providing a file:// URL. This enables a multi-step attack chain:
+    (1) Use SSRF to read file:///var/www/backend/api/config/jwt.php
+    (2) Extract the hardcoded JWT secret from the PHP source
+    (3) Forge a properly HS256-signed JWT with is_admin=true
+    (4) Access all /admin/* endpoints with a cryptographically valid token
+    Unlike chain #23 (which uses alg=none or signature bypass), this chain
+    produces a properly signed token that survives fixing those JWT bugs.
+    Vulnerable Code: backend/api/controllers/WineController.php
+      $content = @file_get_contents($data['url']);
+      (no URL scheme validation, no SSRF protection)
+    Fix: Validate the URL scheme (allow only https://), block private/internal
+    IPs, and use curl with CURLOPT_PROTOCOLS instead of file_get_contents():
+      $parsed = parse_url($data['url']);
+      if (!in_array($parsed['scheme'], ['http', 'https'])) { reject; }
+    Chain Dependencies: #11/#12 are NOT required — this chain uses the real
+    secret to create a validly signed token.
+    Example: {"url": "file:///var/www/backend/api/config/jwt.php"}
+
+28. SQL Injection -> TOTP Secret Extraction -> 2FA Bypass -> Account Takeover (Vulnerability Chain)
+    CWE: CWE-89 (SQL Injection), CWE-308 (Use of Single-factor Authentication)
+    Severity: CRITICAL
+    Endpoints: GET /wines?search= (step 1), POST /auth/login (step 4)
+    Description: This chain combines SQL injection with TOTP secret theft to
+    fully bypass two-factor authentication and take over any account,
+    including admin. The attack proceeds in four steps:
+    (1) Use SQL injection (#3 wine search, or #2/#4) to extract email,
+        password_hash, and totp_secret for all users from the users table
+    (2) Crack the password hash offline (users have weak passwords)
+    (3) Use the stolen totp_secret to compute valid TOTP codes
+    (4) Login as the victim with email + cracked password + valid TOTP code
+    This demonstrates that 2FA provides no additional security when the TOTP
+    secret is stored alongside credentials that are already extractable via
+    SQL injection. The entire second factor is nullified.
+    Chain Dependencies: Requires #3 (or #2/#4) for SQL injection.
+    Example SQLi payload (wine search, 8 columns):
+      search=' UNION SELECT 1,email,password_hash,name,5,6,totp_secret,totp_enabled FROM users--
+    Example SQLi payload (wine reviews, 5 columns):
+      GET /wines/0 UNION SELECT 1,email,password_hash,totp_secret,totp_enabled FROM users--/reviews
 
 
 AI SECURITY VULNERABILITIES
