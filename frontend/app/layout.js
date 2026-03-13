@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
 export const metadata = {
-  title: 'TaintedPort - Portuguese Wine Store (Security Test App)',
+  title: 'TaintedPort',
   description: 'TaintedPort is a deliberately vulnerable Portuguese wine store for DAST and security testing purposes.',
 };
 
