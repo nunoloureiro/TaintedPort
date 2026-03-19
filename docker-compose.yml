@@ -11,5 +11,11 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+        reservations:
+          memory: 256m
     environment:
       - NODE_ENV=production

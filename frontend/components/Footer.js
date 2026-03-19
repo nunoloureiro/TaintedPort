@@ -10,6 +10,7 @@ export default function Footer() {
             More info
           </Link>
         </p>
+        <p className="text-zinc-600 text-xs mt-2">v{process.env.APP_VERSION}</p>
       </div>
     </footer>
   );

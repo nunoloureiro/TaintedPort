@@ -46,6 +46,8 @@ sudo docker rm taintedport 2>/dev/null || true
 sudo docker run -d \
     --name taintedport \
     --restart unless-stopped \
+    --memory 768m \
+    --memory-swap 1g \
     -p 127.0.0.1:8080:80 \
     taintedport:latest
 
