@@ -1,6 +1,5 @@
-'use client';
-
-import { useState, useEffect } from 'react';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const severityColors = {
   critical: 'bg-red-500/20 text-red-300 border-red-500/40',
@@ -246,74 +245,7 @@ function SummaryRow({ vuln }) {
 }
 
 export default function VulnsPage() {
-  const [raw, setRaw] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    // Try fetching from the same origin first (works in Docker), fallback to API host
-    const urls = ['/KnownVulnerabilities.txt', '/api/KnownVulnerabilities.txt'];
-    
-    async function fetchFile() {
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const text = await res.text();
-            if (text && !text.startsWith('<!')) { // Make sure it's not HTML
-              setRaw(text);
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          // Try next URL
-        }
-      }
-      
-      // Fallback: try the API host directly
-      try {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-        if (apiBase) {
-          const res = await fetch(`${apiBase.replace('/api', '')}/KnownVulnerabilities.txt`);
-          if (res.ok) {
-            const text = await res.text();
-            setRaw(text);
-            setLoading(false);
-            return;
-          }
-        }
-      } catch (e) {}
-      
-      setError('Could not load vulnerability data.');
-      setLoading(false);
-    }
-    
-    fetchFile();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-pattern flex items-center justify-center">
-        <div className="animate-pulse text-center">
-          <div className="text-5xl mb-4">🔍</div>
-          <p className="text-zinc-400">Loading vulnerability data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-pattern flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-5xl mb-4">⚠️</div>
-          <p className="text-red-400">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
+  const raw = readFileSync(join(process.cwd(), 'KnownVulnerabilities.txt'), 'utf-8');
   const { summaryTable, businessTable, aiTable, sections, notesLines } = parseVulnerabilities(raw);
 
   const standardVulns = sections.filter(s => parseInt(s.id) <= 16);

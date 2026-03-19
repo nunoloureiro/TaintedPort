@@ -17,6 +17,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
+COPY KnownVulnerabilities.txt ./KnownVulnerabilities.txt
 
 ENV NEXT_PUBLIC_API_URL=${API_URL}
 RUN npm run build
@@ -36,11 +37,8 @@ RUN apk add --no-cache \
 RUN docker-php-ext-install pdo pdo_sqlite
 
 # ---------- PHP backend ----------
-# NOTE: KnownVulnerabilities.txt lives on the 'solutions' branch.
-# Before building, run: git checkout solutions -- KnownVulnerabilities.txt
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
-COPY KnownVulnerabilities.txt /var/www/backend/KnownVulnerabilities.txt
 
 # Ensure the database directory is writable
 RUN mkdir -p /var/www/backend && chown -R www-data:www-data /var/www/backend
@@ -61,11 +59,9 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # ---------- PHP-FPM config ----------
-# Listen on a socket instead of TCP for performance
-RUN sed -i 's|listen = 9000|listen = /var/run/php-fpm.sock|' /usr/local/etc/php-fpm.d/zz-docker.conf && \
-    echo "listen.owner = nginx" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
-    echo "listen.group = nginx" >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
-    echo "listen.mode = 0660" >> /usr/local/etc/php-fpm.d/zz-docker.conf
+# Custom pool: limited workers for t2.small memory constraints
+COPY docker/php-fpm-pool.conf /usr/local/etc/php-fpm.d/www.conf
+RUN rm -f /usr/local/etc/php-fpm.d/zz-docker.conf
 
 # Create required directories
 RUN mkdir -p /var/run/nginx /var/log/supervisor /var/tmp/nginx
