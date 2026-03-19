@@ -1,7 +1,9 @@
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const version = readFileSync(resolve(import.meta.dirname, '..', 'VERSION'), 'utf-8').trim();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const version = readFileSync(resolve(__dirname, '..', 'VERSION'), 'utf-8').trim();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
