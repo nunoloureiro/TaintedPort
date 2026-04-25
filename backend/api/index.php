@@ -24,6 +24,7 @@ require_once __DIR__ . '/controllers/OrderController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 require_once __DIR__ . '/controllers/ReviewController.php';
 require_once __DIR__ . '/controllers/PiCallbackController.php';
+require_once __DIR__ . '/controllers/ContactController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -44,6 +45,12 @@ if ($path === '/pi-callback' && ($method === 'GET' || $method === 'POST')) {
     $ctrl = new PiCallbackController();
     $ctrl->callback();
     // callback() calls exit after sending the GIF
+}
+
+// Contact preview returns HTML, not JSON — handle before the JSON router
+if ($path === '/contact/preview' && $method === 'POST') {
+    $ctrl = new ContactController();
+    $ctrl->preview();
 }
 
 // Simple router
