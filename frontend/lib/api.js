@@ -69,4 +69,12 @@ export const adminAPI = {
   updateOrderStatus: (id, status) => api.put(`/admin/orders/${id}/status`, { status }),
 };
 
+// Contact API
+export const contactAPI = {
+  preview: (data) => api.post('/contact/preview', new URLSearchParams(data), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    responseType: 'text',
+  }),
+};
+
 export default api;
