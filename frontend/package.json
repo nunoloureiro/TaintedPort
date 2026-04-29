@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "autoprefixer": "^10.4.24",
+    "autoprefixer": "^10.4.27",
     "axios": "^1.13.5",
     "next": "^14.2.35",
     "postcss": "^8.5.6",
