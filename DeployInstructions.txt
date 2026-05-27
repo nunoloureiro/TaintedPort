@@ -1,19 +1,15 @@
 Prerequisites
 -------------
-Docker 23+ / BuildKit (buildx) is required for named build contexts.
+Docker 23+ / BuildKit (buildx) is required.
 
 
-Build & push (run from ~/dev/TaintedPort)
------------------------------------------
+Build & push
+------------
 ./build.sh
 
 (Or manually:)
 
-docker buildx build \
-    --build-context vulns=../TaintedPort-Vulns \
-    --platform linux/amd64 \
-    -t nunoloureiro/taintedport:latest .
-
+docker buildx build --platform linux/amd64 -t nunoloureiro/taintedport:latest .
 docker push nunoloureiro/taintedport:latest
 
 

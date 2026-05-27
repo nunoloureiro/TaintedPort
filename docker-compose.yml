@@ -4,8 +4,6 @@ services:
   taintedport:
     build:
       context: .
-      additional_contexts:
-        vulns: ../TaintedPort-Vulns
       args:
         # For local Docker: use path-based routing via nginx
         API_URL: /api

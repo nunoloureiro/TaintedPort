@@ -29,7 +29,6 @@ show_help() {
     echo -e "${BOLD}Usage:${NC} ./build.sh [OPTIONS]"
     echo ""
     echo "  Lint, build, and push the TaintedPort Docker image."
-    echo "  Requires the vulns build context at ../TaintedPort-Vulns."
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo -e "  ${CYAN}--prune${NC}     Prune unused Docker images after build"
@@ -54,14 +53,11 @@ for arg in "$@"; do
     esac
 done
 
-# ── Sanity check: vulns context must exist ────────────────────
-if [ ! -d "$VULNS_CONTEXT" ]; then
-    echo -e "  ${RED}✗ Vulns context missing at $VULNS_CONTEXT${NC}"
-    exit 1
-fi
-if [ ! -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then
-    echo -e "  ${RED}✗ KnownVulnerabilities.txt missing in $VULNS_CONTEXT${NC}"
-    exit 1
+# If the maintainer's vulns directory is present, use it as the build
+# context override. Otherwise the build proceeds with the in-repo stub.
+BUILD_ARGS=()
+if [ -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then
+    BUILD_ARGS+=(--build-context "vulns=$VULNS_CONTEXT")
 fi
 
 # ── Lint ──────────────────────────────────────────────────────
@@ -91,7 +87,7 @@ echo -e "  ${BLUE}${BOLD}[2/3]${NC} ${BOLD}Building Docker image...${NC}"
 echo -e "  ${DIM}─────────────────────────────────────────${NC}"
 
 docker buildx build \
-    --build-context "vulns=$VULNS_CONTEXT" \
+    "${BUILD_ARGS[@]}" \
     --platform linux/amd64 \
     --no-cache \
     -t "$IMAGE" \

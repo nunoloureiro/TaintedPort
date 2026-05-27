@@ -3,13 +3,16 @@
 # TaintedPort - Multi-stage Dockerfile
 # Bundles Next.js frontend + PHP backend + nginx in one image
 #
-# Two build contexts:
-#   - default ("."):  this repo
-#   - "vulns":        a sibling directory supplying KnownVulnerabilities.txt
+# A plain "docker build ." works out of the box and uses the stub
+# in vulns-stub/ for KnownVulnerabilities.txt. The maintainer
+# replaces it at build time by passing a different vulns context:
 #
-# Use ./build.sh (or docker buildx with --build-context vulns=...).
-# Without the vulns context the COPY below fails fast, by design.
+#     docker buildx build --build-context vulns=<path> ...
 # ============================================================
+
+# --- Vulns content source (default: the in-repo stub) ----------
+FROM scratch AS vulns
+COPY vulns-stub/ /
 
 # --- Stage 1: Build the Next.js frontend ---
 FROM node:18-alpine AS frontend-build
