@@ -1,0 +1,36 @@
+Prerequisites
+-------------
+Both repos checked out side-by-side:
+  ~/dev/TaintedPort/         (this repo)
+  ~/dev/TaintedPort-Vulns/   (private companion)
+
+Docker 23+ / BuildKit (buildx) is required for named build contexts.
+
+
+Build & push (run from ~/dev/TaintedPort)
+-----------------------------------------
+docker buildx build \
+    --build-context vulns=../TaintedPort-Vulns \
+    --platform linux/amd64 \
+    -t nunoloureiro/taintedport:latest .
+
+docker push nunoloureiro/taintedport:latest
+
+
+Deploy on EC2
+-------------
+sudo docker pull nunoloureiro/taintedport:latest
+sudo docker stop taintedport; sudo docker rm taintedport
+sudo docker run -d \
+    --name taintedport \
+    --restart unless-stopped \
+    -p 127.0.0.1:8080:80 \
+    nunoloureiro/taintedport:latest
+
+
+Verify
+------
+sudo docker logs --tail=30 taintedport
+# Expect: "[init] php-fpm socket present at /var/run/php-fpm.sock"
+curl -sI -H 'Host: api.taintedport.com' http://localhost:8080/wines | head -1
+# Expect: HTTP/1.1 200 OK

@@ -1,0 +1,12 @@
+node_modules
+.next
+frontend/node_modules
+frontend/.next
+backend/database.db
+.git
+.gitignore
+.vscode
+*.md
+!README.md
+docker-compose*.yml
+aws/
