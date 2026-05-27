@@ -1,5 +1,1 @@
 This file is intentionally a placeholder in the public source tree.
-
-The deployed instance at https://taintedport.com replaces this file at
-build time with a longer document. If you're running your own build
-straight from source, this is the contents you'll see.
