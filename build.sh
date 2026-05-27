@@ -56,7 +56,7 @@ done
 # If the maintainer's vulns directory is present, use it as the build
 # context override. Otherwise the build proceeds with the in-repo stub.
 BUILD_ARGS=()
-if [ -e "$VULNS_CONTEXT/vulns.dat" ]; then
+if [ -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then
     BUILD_ARGS+=(--build-context "vulns=$VULNS_CONTEXT")
 fi
 

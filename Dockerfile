@@ -52,7 +52,7 @@ COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 
 RUN mkdir -p /var/www/private && chown -R www-data:www-data /var/www/private
-COPY --from=vulns vulns.dat /var/www/private/vulns.dat
+COPY --from=vulns KnownVulnerabilities.txt /var/www/private/KnownVulnerabilities.txt
 
 # Ensure the database directory is writable
 RUN mkdir -p /var/www/backend && chown -R www-data:www-data /var/www/backend
