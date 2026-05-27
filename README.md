@@ -25,13 +25,12 @@ Then open `http://localhost:8080`. Locally, the API is reachable at `http://loca
 
 ### Build from source
 
-This image is built against two contexts — the public source tree (this repo) and a sibling private companion. With both checked out side-by-side:
-
 ```bash
-docker buildx build \
-    --build-context vulns=../TaintedPort-Vulns \
-    -t taintedport:latest .
+./build.sh                  # lint, build, push
+./build.sh --no-push        # build only
 ```
+
+`docker-compose.yml` runs the same flow with `API_URL=/api` for local hostnames.
 
 For Docker Compose, `docker-compose.yml` already wires the additional context and uses `API_URL=/api` so the frontend talks to the API via path-based routing:
 
@@ -128,11 +127,7 @@ A cron job runs `docker restart taintedport` every Monday at 00:00 UTC. Since th
 ### Push to Docker Hub (for sharing)
 
 ```bash
-docker buildx build \
-    --build-context vulns=../TaintedPort-Vulns \
-    --platform linux/amd64 \
-    -t nunoloureiro/taintedport:latest .
-docker push nunoloureiro/taintedport:latest
+./build.sh
 ```
 
 Others can then run:

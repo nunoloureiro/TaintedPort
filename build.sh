@@ -29,7 +29,7 @@ show_help() {
     echo -e "${BOLD}Usage:${NC} ./build.sh [OPTIONS]"
     echo ""
     echo "  Lint, build, and push the TaintedPort Docker image."
-    echo "  Requires the sibling private repo at ../TaintedPort-Vulns."
+    echo "  Requires the vulns build context at ../TaintedPort-Vulns."
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo -e "  ${CYAN}--prune${NC}     Prune unused Docker images after build"
@@ -54,11 +54,9 @@ for arg in "$@"; do
     esac
 done
 
-# ── Sanity check: private context must exist ──────────────────
+# ── Sanity check: vulns context must exist ────────────────────
 if [ ! -d "$VULNS_CONTEXT" ]; then
     echo -e "  ${RED}✗ Vulns context missing at $VULNS_CONTEXT${NC}"
-    echo -e "  ${DIM}  Clone the private companion:${NC}"
-    echo -e "  ${DIM}    git clone git@github.com:nunoloureiro/TaintedPort-Vulns.git $VULNS_CONTEXT${NC}"
     exit 1
 fi
 if [ ! -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then

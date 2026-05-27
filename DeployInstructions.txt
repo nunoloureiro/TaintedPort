@@ -1,14 +1,14 @@
 Prerequisites
 -------------
-Both repos checked out side-by-side:
-  ~/dev/TaintedPort/         (this repo)
-  ~/dev/TaintedPort-Vulns/   (private companion)
-
 Docker 23+ / BuildKit (buildx) is required for named build contexts.
 
 
 Build & push (run from ~/dev/TaintedPort)
 -----------------------------------------
+./build.sh
+
+(Or manually:)
+
 docker buildx build \
     --build-context vulns=../TaintedPort-Vulns \
     --platform linux/amd64 \

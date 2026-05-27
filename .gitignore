@@ -38,6 +38,10 @@ next-env.d.ts
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
 
+# Local AI-assistant config — not for distribution
+CLAUDE.md
+.claude/
+
 # Python
 __pycache__/
 *.pyc

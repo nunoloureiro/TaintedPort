@@ -3,20 +3,12 @@
 # TaintedPort - Multi-stage Dockerfile
 # Bundles Next.js frontend + PHP backend + nginx in one image
 #
-# This image is built against TWO contexts:
-#   - default ("."): this repo
-#   - "vulns":       a sibling private repo containing
-#                    KnownVulnerabilities.txt
+# Two build contexts:
+#   - default ("."):  this repo
+#   - "vulns":        a sibling directory supplying KnownVulnerabilities.txt
 #
-# Build command:
-#   docker buildx build \
-#       --build-context vulns=../TaintedPort-Vulns \
-#       --platform linux/amd64 \
-#       -t nunoloureiro/taintedport:latest .
-#
-# Without the vulns context, the COPY below fails with a clear
-# "context not defined" error — by design, so an image is never
-# accidentally published without KnownVulnerabilities.txt baked in.
+# Use ./build.sh (or docker buildx with --build-context vulns=...).
+# Without the vulns context the COPY below fails fast, by design.
 # ============================================================
 
 # --- Stage 1: Build the Next.js frontend ---
@@ -55,7 +47,6 @@ RUN docker-php-ext-install pdo pdo_sqlite
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 
-# Pulled from the sibling private repo via --build-context vulns=…
 COPY --from=vulns KnownVulnerabilities.txt /var/www/backend/KnownVulnerabilities.txt
 
 # Ensure the database directory is writable
