@@ -251,44 +251,26 @@ export default function VulnsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Try fetching from the same origin first (works in Docker), fallback to API host
-    const urls = ['/KnownVulnerabilities.txt', '/api/KnownVulnerabilities.txt'];
-    
+    // The data file is served by nginx under the same auth realm as this
+    // page, so the browser automatically reuses the credentials cached on
+    // first load of /a/*.
     async function fetchFile() {
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const text = await res.text();
-            if (text && !text.startsWith('<!')) { // Make sure it's not HTML
-              setRaw(text);
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          // Try next URL
-        }
-      }
-      
-      // Fallback: try the API host directly
       try {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-        if (apiBase) {
-          const res = await fetch(`${apiBase.replace('/api', '')}/KnownVulnerabilities.txt`);
-          if (res.ok) {
-            const text = await res.text();
+        const res = await fetch('/a/vulns/data', { credentials: 'same-origin' });
+        if (res.ok) {
+          const text = await res.text();
+          if (text && !text.startsWith('<!')) {
             setRaw(text);
             setLoading(false);
             return;
           }
         }
       } catch (e) {}
-      
-      setError('Could not load vulnerability data.');
+
+      setError('Could not load data.');
       setLoading(false);
     }
-    
+
     fetchFile();
   }, []);
 
@@ -485,7 +467,7 @@ export default function VulnsPage() {
 
         {/* Footer */}
         <div className="text-center text-zinc-600 text-xs mt-16">
-          Source: KnownVulnerabilities.txt
+          Source: /a/vulns/data
         </div>
       </div>
     </div>

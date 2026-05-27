@@ -18,6 +18,16 @@ chown -R www-data:www-data /var/www/backend/database.db /var/www/backend/data
 
 echo "[init] Database ready."
 
+# Seed the htpasswd file used by nginx to gate /a/*.
+# Set ADMIN_USER / ADMIN_PASS at runtime to override; the defaults are
+# only suitable for local development.
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_PASS="${ADMIN_PASS:-taintedport}"
+htpasswd -bcB /etc/nginx/.htpasswd "$ADMIN_USER" "$ADMIN_PASS" >/dev/null 2>&1
+chown nginx:nginx /etc/nginx/.htpasswd
+chmod 0440 /etc/nginx/.htpasswd
+echo "[init] htpasswd seeded for user '$ADMIN_USER'"
+
 # Background sanity check: php-fpm must create its unix socket within 15s
 # after supervisord starts the children. If it doesn't, FPM is almost
 # certainly listening on TCP (upstream image config drift) and nginx will

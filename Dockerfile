@@ -4,8 +4,8 @@
 # Bundles Next.js frontend + PHP backend + nginx in one image
 #
 # A plain "docker build ." works out of the box and uses the stub
-# in vulns-stub/ for KnownVulnerabilities.txt. The maintainer
-# replaces it at build time by passing a different vulns context:
+# in vulns-stub/ for the bundled data file. The maintainer replaces
+# it at build time by passing a different vulns context:
 #
 #     docker buildx build --build-context vulns=<path> ...
 # ============================================================
@@ -38,6 +38,7 @@ FROM php:8.2-fpm-alpine
 # Install nginx, supervisor, sqlite, and dev libs for PHP extensions
 RUN apk add --no-cache \
     nginx \
+    apache2-utils \
     supervisor \
     nodejs \
     sqlite \
@@ -50,7 +51,8 @@ RUN docker-php-ext-install pdo pdo_sqlite
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 
-COPY --from=vulns KnownVulnerabilities.txt /var/www/backend/KnownVulnerabilities.txt
+RUN mkdir -p /var/www/private && chown -R www-data:www-data /var/www/private
+COPY --from=vulns vulns.dat /var/www/private/vulns.dat
 
 # Ensure the database directory is writable
 RUN mkdir -p /var/www/backend && chown -R www-data:www-data /var/www/backend
