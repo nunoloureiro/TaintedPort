@@ -86,3 +86,4 @@ Single Docker container running three services via supervisord:
 - OpenAPI spec at `openapi.yaml`.
 - Version tracked in `VERSION`.
 - No PHP dependency manager — vanilla PHP, no Composer.
+- `tests/conftest.py` is duplicated in the sibling private repo. When you edit it here, copy the new version over to `../TaintedPort-Vulns/tests/conftest.py` so both suites stay in sync.
