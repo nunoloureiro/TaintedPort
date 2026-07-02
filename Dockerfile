@@ -33,7 +33,7 @@ ENV NEXT_PUBLIC_API_URL=${API_URL}
 RUN npm run build
 
 # --- Stage 2: Final runtime image ---
-FROM php:8.2-fpm-alpine
+FROM php:8.5.7RC2-fpm-alpine
 
 # Install nginx, supervisor, sqlite, and dev libs for PHP extensions
 RUN apk add --no-cache \
