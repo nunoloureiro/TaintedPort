@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 export default function Footer() {
+  const version = process.env.NEXT_PUBLIC_APP_VERSION || 'dev';
+
   return (
     <footer className="py-6 px-4 border-t border-dark-border bg-dark/80">
       <div className="max-w-6xl mx-auto text-center">
@@ -10,6 +12,7 @@ export default function Footer() {
             More info
           </Link>
         </p>
+        <p className="text-zinc-600 text-xs mt-2">v{version}</p>
       </div>
     </footer>
   );

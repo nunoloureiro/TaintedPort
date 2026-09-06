@@ -24,12 +24,17 @@ WORKDIR /app
 # Local Docker: /api (nginx proxies to PHP-FPM)
 ARG API_URL=https://api.taintedport.com
 
+# App version: "<major>.<commit count>", computed by build.sh from the
+# VERSION file and git history (not available inside the build context).
+ARG APP_VERSION=dev
+
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
 
 ENV NEXT_PUBLIC_API_URL=${API_URL}
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 RUN npm run build
 
 # --- Stage 2: Final runtime image ---

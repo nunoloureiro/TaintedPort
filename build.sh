@@ -25,6 +25,10 @@ IMAGE="nunoloureiro/taintedport:latest"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VULNS_CONTEXT="$SCRIPT_DIR/../TaintedPort-Vulns"
 
+# App version: <major from VERSION file>.<total commit count>. Bump VERSION
+# by hand for a major bump; the commit count takes care of the rest.
+APP_VERSION="$(cat "$SCRIPT_DIR/VERSION").$(git -C "$SCRIPT_DIR" rev-list --count HEAD)"
+
 show_help() {
     echo -e "${BOLD}Usage:${NC} ./build.sh [OPTIONS]"
     echo ""
@@ -55,7 +59,7 @@ done
 
 # If the maintainer's vulns directory is present, use it as the build
 # context override. Otherwise the build proceeds with the in-repo stub.
-BUILD_ARGS=()
+BUILD_ARGS=(--build-arg "APP_VERSION=$APP_VERSION")
 if [ -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then
     BUILD_ARGS+=(--build-context "vulns=$VULNS_CONTEXT")
 fi
@@ -98,7 +102,7 @@ fi
 
 # ── Build ──────────────────────────────────────────────────────
 echo ""
-echo -e "  ${BLUE}${BOLD}[3/4]${NC} ${BOLD}Building Docker image...${NC}"
+echo -e "  ${BLUE}${BOLD}[3/4]${NC} ${BOLD}Building Docker image...${NC} ${DIM}(v$APP_VERSION)${NC}"
 echo -e "  ${DIM}─────────────────────────────────────────${NC}"
 
 docker buildx build \

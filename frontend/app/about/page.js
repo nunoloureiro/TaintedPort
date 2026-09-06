@@ -4,6 +4,8 @@ import Link from 'next/link';
 import Button from '@/components/Button';
 
 export default function AboutPage() {
+  const version = process.env.NEXT_PUBLIC_APP_VERSION || 'dev';
+
   return (
     <div className="min-h-screen bg-pattern">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -104,6 +106,7 @@ export default function AboutPage() {
                 </span>
               ))}
             </div>
+            <p className="text-zinc-500 text-sm mt-4">Version {version}</p>
           </div>
         </div>
 

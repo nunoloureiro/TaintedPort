@@ -7,6 +7,7 @@ services:
       args:
         # For local Docker: use path-based routing via nginx
         API_URL: /api
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: taintedport
     ports:
       - "8080:80"
