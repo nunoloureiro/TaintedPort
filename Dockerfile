@@ -51,8 +51,14 @@ RUN docker-php-ext-install pdo pdo_sqlite
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 
-RUN mkdir -p /var/www/private && chown -R www-data:www-data /var/www/private
-COPY --from=vulns KnownVulnerabilities.txt /var/www/private/KnownVulnerabilities.txt
+# Owned by nginx (not www-data/php-fpm), and locked down to that owner only.
+# nginx gates this file behind basic auth at /a/vulns/data (see
+# docker/nginx.conf); if php-fpm could also read it directly, the app's
+# intentional LFI/SSRF vuln (POST /wines/import-url -> file://) would let any
+# authenticated user read the answer-key file straight off disk, bypassing
+# the auth gate entirely.
+RUN mkdir -p /var/www/private && chown nginx:nginx /var/www/private && chmod 750 /var/www/private
+COPY --from=vulns --chown=nginx:nginx --chmod=440 KnownVulnerabilities.txt /var/www/private/KnownVulnerabilities.txt
 
 # Ensure the database directory is writable
 RUN mkdir -p /var/www/backend && chown -R www-data:www-data /var/www/backend
