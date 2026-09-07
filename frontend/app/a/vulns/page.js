@@ -59,7 +59,7 @@ function parseVulnerabilities(raw) {
       currentTableContext = 'chains';
       continue;
     }
-    if (line.startsWith('AI SECURITY VULNERABILITIES')) {
+    if (line.startsWith('AI CLIENT TRAPS')) {
       currentTableContext = 'ai';
       continue;
     }
