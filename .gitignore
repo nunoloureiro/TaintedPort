@@ -18,6 +18,9 @@
 # misc
 .DS_Store
 *.pem
+# ...except the partner-integration public key — meant to be public, and
+# must actually be present in the repo/image for the app to serve it.
+!backend/api/config/partner_public.pem
 
 # debug
 npm-debug.log*

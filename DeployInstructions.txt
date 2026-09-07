@@ -7,6 +7,14 @@ Build & push
 ------------
 ./build.sh
 
+IMPORTANT: pushing commits to git does NOT change the deployed app by
+itself. The version shown in the footer/about page (and now in `docker
+logs`, see Verify below) only changes when ./build.sh runs — it computes
+APP_VERSION from the current commit count and bakes it into a fresh image,
+then pushes that image to Docker Hub. If you skip this step and go
+straight to the EC2 deploy below, `docker pull` just re-pulls whatever
+image was already tagged `:latest` — same version, same code, no-op.
+
 build.sh supplies the maintainer's build context from ../TaintedPort-Vulns
 via '--build-context vulns=...'. Without that context the image ships the
 in-repo stub from vulns-stub/.
@@ -39,7 +47,9 @@ NOT safe for a public deployment. Always set your own values here.
 Verify
 ------
 sudo docker logs --tail=30 taintedport
-# Expect: "[init] php-fpm socket present at /var/run/php-fpm.sock"
+# Expect: "  Version: 1.<commit count>" near the top (confirms this is the
+# image ./build.sh most recently produced, not a stale pull) and
+# "[init] php-fpm socket present at /var/run/php-fpm.sock"
 
 curl -sI -H 'Host: api.taintedport.com' http://localhost:8080/wines | head -1
 # Expect: HTTP/1.1 200 OK

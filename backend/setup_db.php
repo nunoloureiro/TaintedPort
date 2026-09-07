@@ -22,6 +22,8 @@ CREATE TABLE users (
     is_admin INTEGER DEFAULT 0,
     totp_secret TEXT DEFAULT NULL,
     totp_enabled INTEGER DEFAULT 0,
+    reset_token_issued_at INTEGER DEFAULT NULL,
+    account_credit REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -92,7 +94,17 @@ CREATE TABLE reviews (
     FOREIGN KEY (user_id) REFERENCES users(id),
     UNIQUE(wine_id, user_id)
 );
+
+CREATE TABLE referral_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    credit_amount REAL NOT NULL,
+    max_uses INTEGER NOT NULL,
+    used_count INTEGER DEFAULT 0
+);
 ');
+
+$db->exec("INSERT INTO referral_codes (code, credit_amount, max_uses) VALUES ('WELCOME10', 10.00, 1)");
 
 // Seed wine data
 $wines = [

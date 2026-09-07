@@ -3,6 +3,7 @@ set -e
 
 echo "============================================"
 echo "  TaintedPort - Starting fresh instance"
+echo "  Version: ${APP_VERSION:-unknown}"
 echo "============================================"
 
 # Always reset the database on container start

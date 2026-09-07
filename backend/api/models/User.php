@@ -45,7 +45,7 @@ class User {
     }
 
     public function findById($id) {
-        $stmt = $this->db->prepare('SELECT id, name, email, is_admin, totp_enabled, created_at FROM users WHERE id = :id');
+        $stmt = $this->db->prepare('SELECT id, name, email, is_admin, totp_enabled, account_credit, created_at FROM users WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         $result = $stmt->execute();
         return $result->fetchArray(SQLITE3_ASSOC);
@@ -113,5 +113,36 @@ class User {
         $result = $stmt->execute();
         $row = $result->fetchArray(SQLITE3_ASSOC);
         return $row && $row['totp_enabled'] == 1;
+    }
+
+    public function setResetTokenIssuedAt($userId, $issuedAt) {
+        $stmt = $this->db->prepare('UPDATE users SET reset_token_issued_at = :issued_at WHERE id = :id');
+        $stmt->bindValue(':issued_at', $issuedAt, SQLITE3_INTEGER);
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
+        return true;
+    }
+
+    public function clearResetToken($userId) {
+        $stmt = $this->db->prepare('UPDATE users SET reset_token_issued_at = NULL WHERE id = :id');
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
+        return true;
+    }
+
+    public function addCredit($userId, $amount) {
+        $stmt = $this->db->prepare('UPDATE users SET account_credit = account_credit + :amount WHERE id = :id');
+        $stmt->bindValue(':amount', $amount, SQLITE3_FLOAT);
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
+        return true;
+    }
+
+    public function getCredit($userId) {
+        $stmt = $this->db->prepare('SELECT account_credit FROM users WHERE id = :id');
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        return $row ? floatval($row['account_credit']) : 0.0;
     }
 }

@@ -40,6 +40,12 @@ RUN npm run build
 # --- Stage 2: Final runtime image ---
 FROM php:8.2-fpm-alpine
 
+# Re-declared here (see stage 1) so entrypoint.sh can log the running
+# version at container start — the only way to confirm a redeploy actually
+# picked up a new image without loading the site.
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 # Install nginx, supervisor, sqlite, and dev libs for PHP extensions
 RUN apk add --no-cache \
     nginx \

@@ -20,10 +20,14 @@ require_once __DIR__ . '/middleware/auth.php';
 require_once __DIR__ . '/controllers/AuthController.php';
 require_once __DIR__ . '/controllers/WineController.php';
 require_once __DIR__ . '/controllers/CartController.php';
+require_once __DIR__ . '/controllers/CartSnapshotController.php';
 require_once __DIR__ . '/controllers/OrderController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 require_once __DIR__ . '/controllers/ReviewController.php';
 require_once __DIR__ . '/controllers/PiCallbackController.php';
+require_once __DIR__ . '/controllers/PasswordResetController.php';
+require_once __DIR__ . '/controllers/PartnerController.php';
+require_once __DIR__ . '/controllers/ReferralController.php';
 require_once __DIR__ . '/controllers/ContactController.php';
 
 // Parse the request URI
@@ -85,6 +89,23 @@ try {
         $authUser = authenticateToken();
         $ctrl = new AuthController();
         $response = $ctrl->changePassword($authUser);
+    }
+    elseif ($path === '/auth/password/forgot' && $method === 'POST') {
+        $ctrl = new PasswordResetController();
+        $response = $ctrl->forgotPassword();
+    }
+    elseif ($path === '/auth/password/reset' && $method === 'POST') {
+        $ctrl = new PasswordResetController();
+        $response = $ctrl->resetPassword();
+    }
+    elseif ($path === '/partner/auth' && $method === 'POST') {
+        $ctrl = new PartnerController();
+        $response = $ctrl->auth();
+    }
+    elseif ($path === '/account/referral/redeem' && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new ReferralController();
+        $response = $ctrl->redeem($authUser);
     }
     // 2FA routes
     elseif ($path === '/auth/2fa/setup' && $method === 'POST') {
@@ -158,6 +179,16 @@ try {
         $ctrl = new CartController();
         $response = $ctrl->update($authUser);
     }
+    elseif ($path === '/cart/snapshot' && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new CartSnapshotController();
+        $response = $ctrl->snapshot($authUser);
+    }
+    elseif ($path === '/cart/restore' && $method === 'POST') {
+        $authUser = authenticateToken();
+        $ctrl = new CartSnapshotController();
+        $response = $ctrl->restore($authUser);
+    }
     elseif (preg_match('#^/cart/remove/(\d+)$#', $path, $matches) && $method === 'DELETE') {
         $authUser = authenticateToken();
         $ctrl = new CartController();
@@ -201,6 +232,10 @@ try {
     }
     elseif ($path === '/pi-log-data' && $method === 'GET') {
         $ctrl = new PiCallbackController();
+        $response = $ctrl->logData();
+    }
+    elseif ($path === '/password-reset-log' && $method === 'GET') {
+        $ctrl = new PasswordResetController();
         $response = $ctrl->logData();
     }
     else {
