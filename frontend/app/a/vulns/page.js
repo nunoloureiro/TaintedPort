@@ -419,7 +419,7 @@ export default function VulnsPage() {
     // first load of /a/*.
     async function fetchFile() {
       try {
-        const res = await fetch('/a/vulns/data', { credentials: 'same-origin' });
+        const res = await fetch('/a/vulns/data', { credentials: 'same-origin', cache: 'no-store' });
         if (res.ok) {
           const text = await res.text();
           if (text && !text.startsWith('<!')) {
@@ -479,8 +479,9 @@ export default function VulnsPage() {
           </h1>
           <p className="text-zinc-400 max-w-2xl mx-auto">
             Use this reference to verify the accuracy of your DAST scan results.
-            TaintedPort contains {summaryTable.length + businessTable.length + aiTable.length} intentional vulnerabilities
-            {chainsTable.length > 0 ? `, ${chainsTable.length} of which combine into exploit chains` : ''}.
+            TaintedPort contains {summaryTable.length + businessTable.length} intentional vulnerabilities
+            {chainsTable.length > 0 ? `, ${chainsTable.length} of which combine into exploit chains` : ''}
+            {aiTable.length > 0 ? `, plus ${aiTable.length} AI client traps (not app vulnerabilities — see below)` : ''}.
           </p>
         </div>
 
@@ -547,38 +548,6 @@ export default function VulnsPage() {
           </div>
         )}
 
-        {/* AI Security Summary Table */}
-        {aiTable.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span className="text-emerald-400">&#9632;</span> AI Security (Client-Side)
-            </h2>
-            <p className="text-zinc-500 text-sm mb-4">
-              These vulnerabilities test the security of AI/LLM-based clients (scanners, agents, assistants)
-              that process data from this application. The application itself is not vulnerable &mdash; the
-              payloads target the AI tool consuming the data.
-            </p>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-dark-border bg-dark-lighter/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Detailed Descriptions - Standard */}
         {standardVulns.length > 0 && (
           <div className="mb-12">
@@ -599,18 +568,6 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {businessVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
-            </div>
-          </div>
-        )}
-
-        {/* Detailed Descriptions - AI Security */}
-        {aiVulns.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-emerald-400">&#9632;</span> AI Security Details
-            </h2>
-            <div className="grid gap-4">
-              {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}
@@ -654,6 +611,51 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {chainSections.map(c => <ChainDetail key={c.id} chain={c} />)}
+            </div>
+          </div>
+        )}
+
+        {/* AI Client Traps Summary Table */}
+        {aiTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Client Traps
+            </h2>
+            <p className="text-zinc-500 text-sm mb-4">
+              Not app vulnerabilities &mdash; these are decoys planted in the app&apos;s own content to
+              test whether an AI/LLM-based client (scanner, agent, assistant) consuming that content
+              is vulnerable to prompt injection. The application itself is not vulnerable; the
+              payloads target the AI tool reading the data.
+            </p>
+            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-dark-border bg-dark-lighter/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Trap</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Client Trap Details */}
+        {aiVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Client Trap Details
+            </h2>
+            <div className="grid gap-4">
+              {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}
