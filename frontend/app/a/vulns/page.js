@@ -21,15 +21,19 @@ function parseSeverity(text) {
 function parseVulnerabilities(raw) {
   const lines = raw.split('\n');
   const sections = [];
+  const chainSections = [];
   let currentVuln = null;
+  let currentChain = null;
   let summaryTable = [];
   let businessTable = [];
   let aiTable = [];
+  let chainsTable = [];
   let notesLines = [];
   let inNotes = false;
   let inSummaryTable = false;
   let inBusinessTable = false;
   let inAiTable = false;
+  let inChainsTable = false;
   let currentTableContext = 'standard';
 
   for (let i = 0; i < lines.length; i++) {
@@ -38,6 +42,7 @@ function parseVulnerabilities(raw) {
     if (line.startsWith('NOTES FOR TESTERS')) {
       inNotes = true;
       if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
+      if (currentChain) { chainSections.push(currentChain); currentChain = null; }
       continue;
     }
     if (inNotes) {
@@ -48,6 +53,10 @@ function parseVulnerabilities(raw) {
 
     if (line.startsWith('BUSINESS LOGIC VULNERABILITIES')) {
       currentTableContext = 'business';
+      continue;
+    }
+    if (line.startsWith('CHAINED VULNERABILITIES')) {
+      currentTableContext = 'chains';
       continue;
     }
     if (line.startsWith('AI SECURITY VULNERABILITIES')) {
@@ -61,12 +70,30 @@ function parseVulnerabilities(raw) {
       else inSummaryTable = true;
       continue;
     }
-    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable)) continue;
+    if (line.startsWith('#') && line.includes('CHAIN') && line.includes('MEMBERS')) {
+      inChainsTable = true;
+      continue;
+    }
+    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable || inChainsTable)) continue;
 
-    if ((inSummaryTable || inBusinessTable || inAiTable) && line.trim() === '') {
+    if ((inSummaryTable || inBusinessTable || inAiTable || inChainsTable) && line.trim() === '') {
       inSummaryTable = false;
       inBusinessTable = false;
       inAiTable = false;
+      inChainsTable = false;
+      continue;
+    }
+
+    if (inChainsTable && line.trim()) {
+      const match = line.match(/^(CHAIN-\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(Critical|High|Medium|Low)\s*$/);
+      if (match) {
+        chainsTable.push({
+          id: match[1],
+          name: match[2].trim(),
+          members: match[3].trim(),
+          severity: match[4].trim(),
+        });
+      }
       continue;
     }
 
@@ -92,8 +119,21 @@ function parseVulnerabilities(raw) {
     if (line.startsWith('DETAILED DESCRIPTIONS')) continue;
     if (line.startsWith('NOTE:') && currentTableContext === 'ai') continue;
 
+    const chainMatch = line.match(/^(CHAIN-\d+):\s+(.+)/);
+    if (chainMatch) {
+      if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
+      if (currentChain) chainSections.push(currentChain);
+      currentChain = {
+        id: chainMatch[1],
+        title: chainMatch[2].trim(),
+        details: [],
+      };
+      continue;
+    }
+
     const vulnMatch = line.match(/^(\d+\w?)\.\s+(.+)/);
     if (vulnMatch) {
+      if (currentChain) { chainSections.push(currentChain); currentChain = null; }
       if (currentVuln) sections.push(currentVuln);
       currentVuln = {
         id: vulnMatch[1],
@@ -103,14 +143,20 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
+    if (currentChain && line.startsWith('   ')) {
+      currentChain.details.push(line.trimStart());
+      continue;
+    }
+
     if (currentVuln && line.startsWith('   ')) {
       currentVuln.details.push(line.trimStart());
     }
   }
 
   if (currentVuln) sections.push(currentVuln);
+  if (currentChain) chainSections.push(currentChain);
 
-  return { summaryTable, businessTable, aiTable, sections, notesLines };
+  return { summaryTable, businessTable, aiTable, chainsTable, sections, chainSections, notesLines };
 }
 
 function VulnDetail({ detail }) {
@@ -120,18 +166,26 @@ function VulnDetail({ detail }) {
   let vulnCode = [];
   let fixLines = [];
   let currentBlock = null;
+  let currentKv = null;
 
   const singleLineKeys = [
-    'Endpoint', 'Parameter', 'Parameters', 'Header', 'File', 'Frontend',
+    'Endpoint', 'Endpoints', 'Parameter', 'Parameters', 'Header', 'File', 'Frontend',
     'URL', 'CWE', 'OWASP API', 'OWASP', 'Severity', 'Steps', 'Location', 'Detection', 'Also',
+    'Difficulty', 'Target', 'Chain Dependencies', 'Operational note',
   ];
 
+  // "Single-line" keys often wrap across multiple indented lines in the
+  // source file. A continuation line (one that doesn't start a new
+  // recognized key/block) is appended to whichever key or block is
+  // currently open, rather than silently dropped.
   for (const line of detail.details) {
     let matched = false;
     for (const key of singleLineKeys) {
       if (line.startsWith(key + ':')) {
-        currentBlock = null;
-        kvPairs.push({ key, value: line.replace(key + ':', '').trim() });
+        currentBlock = 'kv';
+        const kv = { key, value: line.replace(key + ':', '').trim() };
+        kvPairs.push(kv);
+        currentKv = kv;
         matched = true;
         break;
       }
@@ -158,11 +212,13 @@ function VulnDetail({ detail }) {
       example.push(line);
     } else if (currentBlock === 'desc') {
       description.push(line);
+    } else if (currentBlock === 'kv' && currentKv) {
+      currentKv.value += ' ' + line;
     }
   }
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-zinc-600 transition-colors">
+    <div id={`vuln-${detail.id}`} className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-zinc-600 transition-colors scroll-mt-20">
       <div className="flex items-start gap-3 mb-4">
         <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-purple/20 text-accent-purple font-bold text-sm flex items-center justify-center">
           {detail.id}
@@ -245,6 +301,113 @@ function SummaryRow({ vuln }) {
   );
 }
 
+function MemberLinks({ value }) {
+  const parts = value.split(/(#\d+\w?)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^#(\d+\w?)$/);
+        if (m) {
+          return (
+            <a
+              key={i}
+              href={`#vuln-${m[1]}`}
+              className="text-accent-purple hover:text-accent-purple-light underline underline-offset-2"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function ChainSummaryRow({ chain }) {
+  const severity = parseSeverity(chain.severity);
+  return (
+    <tr className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors">
+      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm">
+        <a href={`#chain-${chain.id}`} className="hover:underline">{chain.id}</a>
+      </td>
+      <td className="px-4 py-3 text-white text-sm font-medium">{chain.name}</td>
+      <td className="px-4 py-3 text-xs font-mono">
+        <MemberLinks value={chain.members} />
+      </td>
+      <td className="px-4 py-3">
+        {severity && (
+          <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${severityColors[severity]}`}>
+            {chain.severity}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ChainDetail({ chain }) {
+  const kvPairs = [];
+  let description = [];
+  let currentBlock = null;
+  let currentKv = null;
+  const singleLineKeys = ['Members', 'Weight'];
+
+  for (const line of chain.details) {
+    let matched = false;
+    for (const key of singleLineKeys) {
+      if (line.startsWith(key + ':')) {
+        currentBlock = 'kv';
+        const kv = { key, value: line.replace(key + ':', '').trim() };
+        kvPairs.push(kv);
+        currentKv = kv;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+
+    if (line.startsWith('Description:')) {
+      currentBlock = 'desc';
+      description.push(line.replace('Description:', '').trim());
+    } else if (currentBlock === 'desc') {
+      description.push(line);
+    } else if (currentBlock === 'kv' && currentKv) {
+      currentKv.value += ' ' + line;
+    }
+  }
+
+  return (
+    <div id={`chain-${chain.id}`} className="bg-dark-card border border-accent-purple/30 rounded-xl p-6 hover:border-accent-purple/50 transition-colors scroll-mt-20">
+      <div className="flex items-start gap-3 mb-4">
+        <span className="flex-shrink-0 px-2.5 h-8 rounded-lg bg-accent-purple/20 text-accent-purple font-bold text-xs flex items-center justify-center font-mono whitespace-nowrap">
+          {chain.id}
+        </span>
+        <h3 className="text-white font-semibold text-lg leading-tight">{chain.title}</h3>
+      </div>
+
+      {kvPairs.length > 0 && (
+        <div className="space-y-1.5 mb-4">
+          {kvPairs.map((kv, i) => (
+            <div key={i} className="flex gap-2 text-sm">
+              <span className="text-zinc-500 font-medium min-w-[90px]">{kv.key}:</span>
+              <span className="text-zinc-300 font-mono text-xs break-all">
+                {kv.key === 'Members' ? <MemberLinks value={kv.value} /> : kv.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {description.length > 0 && (
+        <p className="text-zinc-400 text-sm leading-relaxed">
+          {description.join(' ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function VulnsPage() {
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(true);
@@ -296,7 +459,7 @@ export default function VulnsPage() {
     );
   }
 
-  const { summaryTable, businessTable, aiTable, sections, notesLines } = parseVulnerabilities(raw);
+  const { summaryTable, businessTable, aiTable, chainsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
 
   const standardIds = new Set(summaryTable.map(v => v.id));
   const businessIds = new Set(businessTable.map(v => v.id));
@@ -316,7 +479,8 @@ export default function VulnsPage() {
           </h1>
           <p className="text-zinc-400 max-w-2xl mx-auto">
             Use this reference to verify the accuracy of your DAST scan results.
-            TaintedPort contains {summaryTable.length + businessTable.length + aiTable.length} intentional vulnerabilities.
+            TaintedPort contains {summaryTable.length + businessTable.length + aiTable.length} intentional vulnerabilities
+            {chainsTable.length > 0 ? `, ${chainsTable.length} of which combine into exploit chains` : ''}.
           </p>
         </div>
 
@@ -447,6 +611,49 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Vulnerability Chains Summary Table */}
+        {chainsTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-accent-purple">&#9632;</span> Vulnerability Chains
+            </h2>
+            <p className="text-zinc-500 text-sm mb-4">
+              A chain combines two or more of the vulnerabilities above into a bigger outcome
+              &mdash; typically full account takeover or admin access &mdash; that neither member
+              reaches alone. Click a chain or a member ID below to jump to its full writeup.
+            </p>
+            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-dark-border bg-dark-lighter/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Chain</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Members</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chainsTable.map(c => <ChainSummaryRow key={c.id} chain={c} />)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Vulnerability Chains Detail Cards */}
+        {chainSections.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-accent-purple">&#9632;</span> Chain Details
+            </h2>
+            <div className="grid gap-4">
+              {chainSections.map(c => <ChainDetail key={c.id} chain={c} />)}
             </div>
           </div>
         )}
