@@ -277,7 +277,9 @@ function SummaryRow({ vuln }) {
   const severity = parseSeverity(vuln.severity);
   return (
     <tr className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors">
-      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm">{vuln.id}</td>
+      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm">
+        <a href={`#vuln-${vuln.id}`} className="hover:underline">{vuln.id}</a>
+      </td>
       <td className="px-4 py-3 text-white text-sm font-medium">{vuln.name}</td>
       <td className="px-4 py-3 text-zinc-400 text-xs font-mono">{vuln.location}</td>
       <td className="px-4 py-3">
@@ -461,11 +463,11 @@ export default function VulnsPage() {
 
   const { summaryTable, businessTable, aiTable, chainsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
 
-  const standardIds = new Set(summaryTable.map(v => v.id));
+  const commodityIds = new Set(summaryTable.map(v => v.id));
   const businessIds = new Set(businessTable.map(v => v.id));
   const aiIds = new Set(aiTable.map(v => v.id));
 
-  const standardVulns = sections.filter(s => standardIds.has(s.id));
+  const commodityVulns = sections.filter(s => commodityIds.has(s.id));
   const businessVulns = sections.filter(s => businessIds.has(s.id));
   const aiVulns = sections.filter(s => aiIds.has(s.id));
 
@@ -494,11 +496,11 @@ export default function VulnsPage() {
           ))}
         </div>
 
-        {/* Standard Vulnerabilities Summary Table */}
+        {/* Commodity Vulnerabilities Summary Table */}
         {summaryTable.length > 0 && (
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span className="text-red-400">&#9632;</span> Standard Vulnerabilities
+              <span className="text-red-400">&#9632;</span> Commodity Vulnerabilities
             </h2>
             <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -525,7 +527,7 @@ export default function VulnsPage() {
         {businessTable.length > 0 && (
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span className="text-orange-400">&#9632;</span> Business Logic &amp; API Vulnerabilities
+              <span className="text-orange-400">&#9632;</span> Business Logic Vulnerabilities
             </h2>
             <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -544,30 +546,6 @@ export default function VulnsPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Detailed Descriptions - Standard */}
-        {standardVulns.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-red-400">&#9632;</span> Detailed Descriptions
-            </h2>
-            <div className="grid gap-4">
-              {standardVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
-            </div>
-          </div>
-        )}
-
-        {/* Detailed Descriptions - Business Logic */}
-        {businessVulns.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-orange-400">&#9632;</span> Business Logic &amp; API Details
-            </h2>
-            <div className="grid gap-4">
-              {businessVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}
@@ -603,18 +581,6 @@ export default function VulnsPage() {
           </div>
         )}
 
-        {/* Vulnerability Chains Detail Cards */}
-        {chainSections.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-accent-purple">&#9632;</span> Chain Details
-            </h2>
-            <div className="grid gap-4">
-              {chainSections.map(c => <ChainDetail key={c.id} chain={c} />)}
-            </div>
-          </div>
-        )}
-
         {/* AI Client Traps Summary Table */}
         {aiTable.length > 0 && (
           <div className="mb-12">
@@ -644,6 +610,42 @@ export default function VulnsPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Commodity Vulnerability Details */}
+        {commodityVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-red-400">&#9632;</span> Commodity Details
+            </h2>
+            <div className="grid gap-4">
+              {commodityVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Business Logic Details */}
+        {businessVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-orange-400">&#9632;</span> Business Logic Details
+            </h2>
+            <div className="grid gap-4">
+              {businessVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Vulnerability Chains Detail Cards */}
+        {chainSections.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-accent-purple">&#9632;</span> Chain Details
+            </h2>
+            <div className="grid gap-4">
+              {chainSections.map(c => <ChainDetail key={c.id} chain={c} />)}
             </div>
           </div>
         )}
