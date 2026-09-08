@@ -410,10 +410,27 @@ function ChainDetail({ chain }) {
   );
 }
 
+const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low'];
+
 export default function VulnsPage() {
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeSeverities, setActiveSeverities] = useState(new Set(ALL_SEVERITIES));
+
+  function toggleSeverity(level) {
+    setActiveSeverities(prev => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
+  }
+
+  function matchesFilter(severityText) {
+    const parsed = parseSeverity(severityText);
+    return !parsed || activeSeverities.has(parsed);
+  }
 
   useEffect(() => {
     // The data file is served by nginx under the same auth realm as this
@@ -471,6 +488,14 @@ export default function VulnsPage() {
   const businessVulns = sections.filter(s => businessIds.has(s.id));
   const aiVulns = sections.filter(s => aiIds.has(s.id));
 
+  // The severity filter only narrows the summary tables (the lists) —
+  // detail cards below always show everything. Each ID in a list already
+  // links straight to its full writeup, so nothing is lost by filtering
+  // the lists alone, and it avoids re-deriving the detail arrays too.
+  const filteredCommodityTable = summaryTable.filter(v => matchesFilter(v.severity));
+  const filteredBusinessTable = businessTable.filter(v => matchesFilter(v.severity));
+  const filteredChainsTable = chainsTable.filter(c => matchesFilter(c.severity));
+
   return (
     <div className="min-h-screen bg-pattern">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -481,19 +506,46 @@ export default function VulnsPage() {
           </h1>
           <p className="text-zinc-400 max-w-2xl mx-auto">
             Use this reference to verify the accuracy of your DAST scan results.
-            TaintedPort contains {summaryTable.length + businessTable.length} intentional vulnerabilities
-            {chainsTable.length > 0 ? `, ${chainsTable.length} of which combine into exploit chains` : ''}
-            {aiTable.length > 0 ? `, plus ${aiTable.length} AI client traps (not app vulnerabilities — see below)` : ''}.
           </p>
         </div>
 
-        {/* Severity Legend */}
+        {/* Counts by type — reflects the severity filter below (AI traps excluded, always shown in full) */}
+        <div className="max-w-sm mx-auto mb-8">
+          <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+            <table className="w-full">
+              <tbody>
+                <tr className="border-b border-dark-border/50">
+                  <td className="px-4 py-2 text-sm text-zinc-400">Commodity</td>
+                  <td className="px-4 py-2 text-sm text-white font-mono text-right">{filteredCommodityTable.length}</td>
+                </tr>
+                <tr className="border-b border-dark-border/50">
+                  <td className="px-4 py-2 text-sm text-zinc-400">Business Logic</td>
+                  <td className="px-4 py-2 text-sm text-white font-mono text-right">{filteredBusinessTable.length}</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-sm text-zinc-400">Chains</td>
+                  <td className="px-4 py-2 text-sm text-white font-mono text-right">{filteredChainsTable.length}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Severity Legend — click to toggle a severity on/off; the counts and lists above/below update live */}
         <div className="flex flex-wrap justify-center gap-3 mb-10">
-          {Object.entries(severityColors).map(([level, classes]) => (
-            <span key={level} className={`text-xs px-3 py-1.5 rounded-full border font-medium capitalize ${classes}`}>
-              {level}
-            </span>
-          ))}
+          {ALL_SEVERITIES.map(level => {
+            const active = activeSeverities.has(level);
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => toggleSeverity(level)}
+                className={`text-xs px-3 py-1.5 rounded-full border font-medium capitalize transition-opacity ${severityColors[level]} ${active ? '' : 'opacity-30'}`}
+              >
+                {level}
+              </button>
+            );
+          })}
         </div>
 
         {/* Commodity Vulnerabilities Summary Table */}
@@ -501,25 +553,30 @@ export default function VulnsPage() {
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-red-400">&#9632;</span> Commodity Vulnerabilities
+              <span className="text-zinc-500 text-sm font-normal">({filteredCommodityTable.length})</span>
             </h2>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-dark-border bg-dark-lighter/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summaryTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
-                  </tbody>
-                </table>
+            {filteredCommodityTable.length > 0 ? (
+              <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-dark-border bg-dark-lighter/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCommodityTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-zinc-500 text-sm">No commodity vulnerabilities match the selected severities.</p>
+            )}
           </div>
         )}
 
@@ -528,25 +585,30 @@ export default function VulnsPage() {
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-orange-400">&#9632;</span> Business Logic Vulnerabilities
+              <span className="text-zinc-500 text-sm font-normal">({filteredBusinessTable.length})</span>
             </h2>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-dark-border bg-dark-lighter/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {businessTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
-                  </tbody>
-                </table>
+            {filteredBusinessTable.length > 0 ? (
+              <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-dark-border bg-dark-lighter/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBusinessTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-zinc-500 text-sm">No business logic vulnerabilities match the selected severities.</p>
+            )}
           </div>
         )}
 
@@ -555,37 +617,43 @@ export default function VulnsPage() {
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-accent-purple">&#9632;</span> Vulnerability Chains
+              <span className="text-zinc-500 text-sm font-normal">({filteredChainsTable.length})</span>
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
               A chain combines two or more of the vulnerabilities above into a bigger outcome
               &mdash; typically full account takeover or admin access &mdash; that neither member
               reaches alone. Click a chain or a member ID below to jump to its full writeup.
             </p>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-dark-border bg-dark-lighter/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Chain</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Members</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {chainsTable.map(c => <ChainSummaryRow key={c.id} chain={c} />)}
-                  </tbody>
-                </table>
+            {filteredChainsTable.length > 0 ? (
+              <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-dark-border bg-dark-lighter/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Chain</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Members</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredChainsTable.map(c => <ChainSummaryRow key={c.id} chain={c} />)}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-zinc-500 text-sm">No chains match the selected severities.</p>
+            )}
           </div>
         )}
 
-        {/* AI Client Traps Summary Table */}
+        {/* AI Client Traps Summary Table — not affected by the severity filter, always shown in full */}
         {aiTable.length > 0 && (
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-emerald-400">&#9632;</span> AI Client Traps
+              <span className="text-zinc-500 text-sm font-normal">({aiTable.length})</span>
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
               Not app vulnerabilities &mdash; these are decoys planted in the app&apos;s own content to
