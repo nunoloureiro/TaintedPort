@@ -16,8 +16,11 @@ const ADMIN_LINKS = [
 ];
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const { itemCount } = useCart();
+  // Hidden rather than removed while the stored login is checked: no guest-menu flash for
+  // signed-in users, and the links stay in the server-rendered HTML for non-JS crawlers
+  const guestHidden = loading ? 'invisible' : '';
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const role = user?.role || (user?.is_admin ? 'admin' : 'user');
@@ -114,13 +117,13 @@ export default function Navbar() {
               <>
                 <Link
                   href="/login"
-                  className="text-zinc-400 hover:text-white transition-colors"
+                  className={`text-zinc-400 hover:text-white transition-colors ${guestHidden}`}
                 >
                   Login
                 </Link>
                 <Link
                   href="/signup"
-                  className="px-4 py-2 bg-gradient-to-r from-accent-purple to-accent-purple-light text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+                  className={`px-4 py-2 bg-gradient-to-r from-accent-purple to-accent-purple-light text-white rounded-lg font-medium hover:opacity-90 transition-opacity ${guestHidden}`}
                 >
                   Sign Up
                 </Link>
@@ -180,10 +183,10 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/login" className="block px-3 py-2 text-zinc-400 hover:text-white" onClick={() => setMobileOpen(false)}>
+                <Link href="/login" className={`block px-3 py-2 text-zinc-400 hover:text-white ${guestHidden}`} onClick={() => setMobileOpen(false)}>
                   Login
                 </Link>
-                <Link href="/signup" className="block px-3 py-2 text-accent-purple hover:text-accent-purple-light" onClick={() => setMobileOpen(false)}>
+                <Link href="/signup" className={`block px-3 py-2 text-accent-purple hover:text-accent-purple-light ${guestHidden}`} onClick={() => setMobileOpen(false)}>
                   Sign Up
                 </Link>
               </>

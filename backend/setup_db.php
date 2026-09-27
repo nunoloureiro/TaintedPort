@@ -166,6 +166,17 @@ CREATE TABLE redeemed_gift_cards (
     redeemed_at INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+CREATE TABLE coverage_hits (
+    session_id TEXT NOT NULL,
+    view_id INTEGER NOT NULL,
+    hit_count INTEGER NOT NULL DEFAULT 1,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    first_visited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_visited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, view_id)
+);
 ');
 
 $db->exec("INSERT INTO referral_codes (code, credit_amount, max_uses) VALUES ('WELCOME10', 10.00, 1)");
@@ -541,6 +552,31 @@ $db->exec("INSERT INTO support_messages (ticket_id, sender_role, sender_id, mess
 $db->exec("INSERT INTO support_messages (ticket_id, sender_role, sender_id, message) VALUES
 ($ticket2, 'admin', $adminId, 'Yes, we deliver Saturdays 9am-6pm. Sundays are delivery-free.')");
 
+// Demo coverage session for previewing /a/coverage; remove when no longer needed
+$coverageDemoSession = '11111111-1111-4111-8111-111111111111';
+$coverageDemoHits = [
+    // [view_id, successes, failures, minutes ago first visited, minutes ago last visited]
+    [75, 12, 0, 58, 3], [76, 3, 0, 55, 20], [81, 4, 0, 54, 12], [82, 2, 0, 53, 40], [83, 9, 0, 52, 5],
+    [84, 18, 0, 51, 4], [78, 5, 0, 45, 8], [80, 2, 0, 44, 30], [85, 3, 0, 42, 15], [77, 2, 0, 40, 25],
+    [88, 1, 0, 35, 35],
+    [28, 22, 0, 58, 3], [29, 4, 0, 58, 5], [30, 4, 0, 58, 5], [41, 35, 2, 51, 4], [39, 37, 0, 51, 4],
+    [40, 0, 2, 38, 22], [5, 1, 0, 53, 53], [6, 2, 1, 54, 12], [7, 12, 2, 54, 3], [42, 9, 0, 45, 8],
+    [43, 5, 1, 46, 9], [44, 1, 1, 44, 18], [15, 5, 0, 42, 15], [16, 1, 0, 43, 43], [1, 2, 0, 44, 30],
+    [21, 2, 0, 35, 33], [49, 3, 0, 40, 25], [56, 0, 3, 30, 28], [60, 0, 2, 29, 27],
+];
+$coverageStmt = $db->prepare('INSERT INTO coverage_hits (session_id, view_id, hit_count, success_count, failure_count, first_visited_at, last_visited_at) VALUES (:session_id, :view_id, :hit_count, :success_count, :failure_count, :first_visited_at, :last_visited_at)');
+foreach ($coverageDemoHits as $h) {
+    $coverageStmt->bindValue(':session_id', $coverageDemoSession, SQLITE3_TEXT);
+    $coverageStmt->bindValue(':view_id', $h[0], SQLITE3_INTEGER);
+    $coverageStmt->bindValue(':hit_count', $h[1] + $h[2], SQLITE3_INTEGER);
+    $coverageStmt->bindValue(':success_count', $h[1], SQLITE3_INTEGER);
+    $coverageStmt->bindValue(':failure_count', $h[2], SQLITE3_INTEGER);
+    $coverageStmt->bindValue(':first_visited_at', gmdate('Y-m-d H:i:s', time() - $h[3] * 60), SQLITE3_TEXT);
+    $coverageStmt->bindValue(':last_visited_at', gmdate('Y-m-d H:i:s', time() - $h[4] * 60), SQLITE3_TEXT);
+    $coverageStmt->execute();
+    $coverageStmt->reset();
+}
+
 // Create exports directory with a sample CSV
 $exportsDir = __DIR__ . '/exports';
 if (!is_dir($exportsDir)) {
@@ -549,7 +585,7 @@ if (!is_dir($exportsDir)) {
 file_put_contents($exportsDir . '/wines-catalog.csv', "id,name,region,type,vintage,price\n1,Quinta do Vallado Douro Tinto,Douro,Red,2020,185.00\n2,Pêra-Manca Branco,Alentejo,White,2019,890.00\n3,Quinta da Aveleda Vinho Verde,Vinho Verde,White,2023,75.00\n");
 
 echo "Database setup complete!\n";
-echo "- Created 11 tables\n";
+echo "- Created 13 tables\n";
 echo "- Seeded " . count($wines) . " wines with stock levels\n";
 echo "- Created demo user: joe@example.com / password123 (id: $joeId)\n";
 echo "- Created demo user: jane@example.com / password123 (id: $janeId)\n";
@@ -558,6 +594,7 @@ echo "- Created support user: support@example.com / password123 (id: $supportId)
 echo "- Created 2 orders for Joe, 3 orders for Jane\n";
 echo "- Seeded " . count($reviews) . " wine reviews\n";
 echo "- Seeded 2 discount codes, 3 wishlist entries, 2 support tickets\n";
+echo "- Seeded " . count($coverageDemoHits) . " demo coverage hits for session $coverageDemoSession\n";
 echo "- Created exports directory with sample CSV\n";
 
 $db->close();

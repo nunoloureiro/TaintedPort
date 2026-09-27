@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, useRedirectIfAuthenticated } from '@/context/AuthContext';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 
@@ -19,6 +19,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
+  useRedirectIfAuthenticated('/');
   const [form, setForm] = useState({ email: '', password: '' });
   const [totpCode, setTotpCode] = useState('');
   const [needs2fa, setNeeds2fa] = useState(false);
@@ -105,6 +106,8 @@ function LoginContent() {
               </div>
 
               <Input
+                id="totp_code"
+                name="totp_code"
                 label="Authentication Code"
                 type="text"
                 placeholder="000000"
@@ -130,8 +133,10 @@ function LoginContent() {
           ) : (
             /* Normal login step */
             <>
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form id="login-form" onSubmit={handleSubmit} className="space-y-5">
                 <Input
+                  id="email"
+                  name="email"
                   label="Email"
                   type="text"
                   placeholder="joe@example.com"
@@ -141,6 +146,8 @@ function LoginContent() {
                 />
 
                 <Input
+                  id="password"
+                  name="password"
                   label="Password"
                   type="password"
                   placeholder="Enter your password"
@@ -152,6 +159,8 @@ function LoginContent() {
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2 text-sm text-zinc-400">
                     <input
+                      id="remember"
+                      name="remember"
                       type="checkbox"
                       className="rounded border-dark-border bg-dark-lighter text-accent-purple focus:ring-accent-purple"
                     />

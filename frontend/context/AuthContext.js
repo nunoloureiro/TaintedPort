@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { authAPI } from '@/lib/api';
 
 const AuthContext = createContext(null);
@@ -88,4 +89,18 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+// Checked only once, when the auth state first resolves, so signing in on the
+// page itself doesn't redirect and override that page's own post-login navigation
+export function useRedirectIfAuthenticated(path = '/') {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const checked = useRef(false);
+
+  useEffect(() => {
+    if (loading || checked.current) return;
+    checked.current = true;
+    if (user) router.replace(path);
+  }, [loading, user, router, path]);
 }

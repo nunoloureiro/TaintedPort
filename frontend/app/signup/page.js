@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, useRedirectIfAuthenticated } from '@/context/AuthContext';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 
 export default function SignupPage() {
   const router = useRouter();
   const { register } = useAuth();
+  useRedirectIfAuthenticated('/');
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);

@@ -3,10 +3,10 @@
 require_once __DIR__ . '/../config/jwt.php';
 
 function authenticateToken() {
-    $headers = getallheaders();
-    $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+    $authHeader = isset($headers['authorization']) ? $headers['authorization'] : '';
 
-    if (empty($authHeader) || !preg_match('/^Bearer\s+(.+)$/', $authHeader, $matches)) {
+    if (empty($authHeader) || !preg_match('/^Bearer\s+(.+)$/i', $authHeader, $matches)) {
         http_response_code(401);
         echo json_encode(['success' => false, 'message' => 'Access denied. No token provided.']);
         exit;

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { wineAPI, adminAPI } from '@/lib/api';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import WineBottle from '@/components/WineBottle';
 
 const emptyForm = {
   name: '', region: '', type: '', vintage: '', price: '',
@@ -11,6 +12,23 @@ const emptyForm = {
   description_short: '', description: '', grapes: '', alcohol: '',
   bottle_size: '750ml', food_pairing: '',
 };
+
+function WineThumbnail({ wine }) {
+  // Remembers the URL that failed rather than a flag, so a newly uploaded image is tried again
+  const [failedSrc, setFailedSrc] = useState(null);
+
+  if (!wine.image_url || failedSrc === wine.image_url) {
+    return <WineBottle type={wine.type} name={wine.name} size="sm" className="h-10 w-auto" />;
+  }
+  return (
+    <img
+      src={wine.image_url}
+      alt={wine.name}
+      className="w-full h-full object-cover"
+      onError={() => setFailedSrc(wine.image_url)}
+    />
+  );
+}
 
 export default function AdminWinesPage() {
   const [wines, setWines] = useState([]);
@@ -199,11 +217,7 @@ export default function AdminWinesPage() {
                   <tr key={wine.id} className="hover:bg-dark-lighter/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-dark-lighter border border-dark-border flex items-center justify-center">
-                        {wine.image_url ? (
-                          <img src={wine.image_url} alt={wine.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-lg">🍷</span>
-                        )}
+                        <WineThumbnail wine={wine} />
                         <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 hover:opacity-100 cursor-pointer transition-opacity">
                           <span className="text-white text-xs">{uploadingId === wine.id ? '…' : '↑'}</span>
                           <input

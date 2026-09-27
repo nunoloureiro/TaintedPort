@@ -68,6 +68,10 @@ RUN docker-php-ext-install pdo pdo_sqlite
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
 
+# Kept outside /var/www/backend: nginx exposes that whole directory at /files/,
+# and this map must not be visible to the crawlers being measured.
+COPY crawler-coverage/ /var/www/crawler-coverage/
+
 # Owned by nginx (not www-data/php-fpm), and locked down to that owner only.
 # nginx gates this file behind basic auth at /a/vulns/data (see
 # docker/nginx.conf); keeping it unreadable by the php-fpm/www-data user is
