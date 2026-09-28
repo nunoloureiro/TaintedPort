@@ -133,4 +133,10 @@ export const supportAPI = {
   reply: (id, message) => api.post(`/support/tickets/${id}/reply`, { message }),
 };
 
+// Crawler coverage API
+export const coverageAPI = {
+  getResults: (sessionId) => api.get(`/coverage/${sessionId}`),
+  recordView: (path) => api.post('/coverage/hit', { path }),
+};
+
 export default api;

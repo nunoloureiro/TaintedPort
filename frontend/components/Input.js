@@ -9,7 +9,7 @@ export default function Input({
   return (
     <div className="space-y-1.5">
       {label && (
-        <label className="block text-sm font-medium text-zinc-300">
+        <label htmlFor={props.id} className="block text-sm font-medium text-zinc-300">
           {label}
         </label>
       )}

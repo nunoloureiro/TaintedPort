@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { adminAPI } from '@/lib/api';
 
 const statusColors = {
@@ -159,8 +159,8 @@ export default function AdminOrdersPage() {
             </thead>
             <tbody className="divide-y divide-dark-border">
               {orders.map(order => (
-                <>
-                  <tr key={order.id} className="hover:bg-dark-lighter/50 transition-colors">
+                <Fragment key={order.id}>
+                  <tr className="hover:bg-dark-lighter/50 transition-colors">
                     <td className="px-6 py-4">
                       <button
                         onClick={() => toggleOrderDetail(order.id)}
@@ -199,7 +199,7 @@ export default function AdminOrdersPage() {
                     </td>
                   </tr>
                   {expandedOrder === order.id && (
-                    <tr key={`${order.id}-detail`}>
+                    <tr>
                       <td colSpan={7} className="px-6 py-4 bg-dark-lighter/30">
                         {loadingDetail ? (
                           <p className="text-zinc-400 text-sm">Loading details...</p>
@@ -261,7 +261,7 @@ export default function AdminOrdersPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

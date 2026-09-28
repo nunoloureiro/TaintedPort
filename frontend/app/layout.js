@@ -4,6 +4,7 @@ import { CartProvider } from '@/context/CartContext';
 import { WishlistProvider } from '@/context/WishlistContext';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import CoverageTracker from '@/components/CoverageTracker';
 
 export const metadata = {
   title: 'TaintedPort - Portuguese Wine Store (Security Test App)',
@@ -14,6 +15,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="antialiased min-h-screen bg-dark flex flex-col">
+        <CoverageTracker />
         <AuthProvider>
           <CartProvider>
             <WishlistProvider>
