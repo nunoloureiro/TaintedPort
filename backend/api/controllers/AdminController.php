@@ -184,6 +184,21 @@ class AdminController {
 
         $userCount = $this->db->query('SELECT COUNT(*) as count FROM users')->fetchArray(SQLITE3_ASSOC);
 
+        $groupBy = isset($_GET['group_by']) ? $_GET['group_by'] : 'region';
+        $groupColumns = ['region' => 'w.region', 'type' => 'w.type', 'vintage' => 'w.vintage'];
+        $groupColumn = isset($groupColumns[$groupBy]) ? $groupColumns[$groupBy] : 'w.region';
+        $grouped = [];
+        $groupedResult = $this->db->query(
+            "SELECT $groupColumn AS bucket, COUNT(*) AS units, COALESCE(SUM(oi.subtotal), 0) AS revenue
+             FROM order_items oi JOIN wines w ON oi.wine_id = w.id
+             GROUP BY $groupColumn ORDER BY revenue DESC"
+        );
+        while ($row = $groupedResult->fetchArray(SQLITE3_ASSOC)) {
+            $row['units'] = intval($row['units']);
+            $row['revenue'] = floatval($row['revenue']);
+            $grouped[] = $row;
+        }
+
         return [
             'success' => true,
             'revenue' => floatval($totals['revenue']),
@@ -194,6 +209,47 @@ class AdminController {
             'low_stock_wines' => $lowStockWines,
             'open_tickets' => intval($openTickets['count']),
             'user_count' => intval($userCount['count']),
+            'grouped_by' => $groupBy,
+            'grouped' => $grouped,
+        ];
+    }
+
+    /**
+     * Account statement for a customer: every order billed to the same company
+     * as the selected user, so business accounts that share a billing entity
+     * are reconciled together on one statement.
+     */
+    public function userStatement($authUser, $userId) {
+        $this->requireAdmin($authUser);
+
+        $user = new User();
+        $target = $user->findById(intval($userId));
+        if (!$target) {
+            http_response_code(404);
+            return ['success' => false, 'message' => 'User not found.'];
+        }
+
+        $company = isset($target['company']) ? $target['company'] : '';
+
+        $lines = [];
+        if ($company !== '') {
+            $sql = "SELECT o.id, o.total, o.status, o.created_at, u.name AS customer_name
+                    FROM orders o JOIN users u ON o.user_id = u.id
+                    WHERE u.company = '$company'
+                    ORDER BY o.created_at DESC";
+            $result = @$this->db->query($sql);
+            if ($result) {
+                while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                    $row['total'] = floatval($row['total']);
+                    $lines[] = $row;
+                }
+            }
+        }
+
+        return [
+            'success' => true,
+            'customer' => ['id' => intval($target['id']), 'name' => $target['name'], 'company' => $company],
+            'statement' => $lines,
         ];
     }
 

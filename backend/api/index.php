@@ -37,6 +37,7 @@ require_once __DIR__ . '/controllers/GiftCardController.php';
 require_once __DIR__ . '/controllers/PaymentController.php';
 require_once __DIR__ . '/controllers/WebhookController.php';
 require_once __DIR__ . '/controllers/CoverageController.php';
+require_once __DIR__ . '/controllers/VoucherController.php';
 
 // Parse the request URI
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -60,6 +61,14 @@ if ($path === '/contact/preview' && $method === 'POST') {
     CoverageRecorder::mark(1);
     $ctrl = new ContactController();
     $ctrl->preview();
+}
+
+// Newsletter preview returns HTML, not JSON — handle before the JSON router
+if ($path === '/newsletter/preview' && $method === 'GET') {
+    CoverageRecorder::mark(107);
+    $ctrl = new ContactController();
+    $ctrl->newsletterPreview();
+    // newsletterPreview() calls exit after sending the HTML
 }
 
 // Printable ticket view returns HTML, not JSON — handle before the JSON router
@@ -127,6 +136,11 @@ try {
         $ctrl = new PasswordResetController();
         $response = $ctrl->resetPassword();
     }
+    elseif ($path === '/auth/remember' && $method === 'POST') {
+        CoverageRecorder::mark(98);
+        $ctrl = new AuthController();
+        $response = $ctrl->loginWithRemember();
+    }
     elseif ($path === '/partner/auth' && $method === 'POST') {
         CoverageRecorder::mark(13);
         $ctrl = new PartnerController();
@@ -170,6 +184,25 @@ try {
         $ctrl = new GiftCardController();
         $response = $ctrl->redeem($authUser);
     }
+    elseif ($path === '/vouchers/promo' && $method === 'GET') {
+        CoverageRecorder::mark(99);
+        $authUser = authenticateToken();
+        $ctrl = new VoucherController();
+        $response = $ctrl->promo($authUser);
+    }
+    elseif ($path === '/vouchers/redeem' && $method === 'POST') {
+        CoverageRecorder::mark(100);
+        $authUser = authenticateToken();
+        $ctrl = new VoucherController();
+        $response = $ctrl->redeem($authUser);
+    }
+    elseif ($path === '/vouchers/cashout' && $method === 'POST') {
+        CoverageRecorder::mark(101);
+        $authUser = authenticateToken();
+        $ctrl = new VoucherController();
+        $response = $ctrl->cashout($authUser);
+    }
+
     // Discount code routes
     elseif ($path === '/discounts/validate' && $method === 'POST') {
         CoverageRecorder::mark(20);
@@ -241,6 +274,16 @@ try {
         CoverageRecorder::mark(31);
         $ctrl = new WineController();
         $response = $ctrl->ratings();
+    }
+    elseif ($path === '/wines/feed' && $method === 'GET') {
+        CoverageRecorder::mark(104);
+        $ctrl = new WineController();
+        $response = $ctrl->feed();
+    }
+    elseif ($path === '/wines/report' && $method === 'GET') {
+        CoverageRecorder::mark(105);
+        $ctrl = new WineController();
+        $response = $ctrl->report();
     }
     elseif ($path === '/wines/import-url' && $method === 'POST') {
         CoverageRecorder::mark(32);
@@ -354,6 +397,12 @@ try {
         $ctrl = new OrderController();
         $response = $ctrl->track();
     }
+    elseif ($path === '/orders/invoice' && $method === 'GET') {
+        CoverageRecorder::mark(102);
+        $authUser = authenticateToken();
+        $ctrl = new OrderController();
+        $response = $ctrl->invoice($authUser);
+    }
     elseif ($path === '/payments/create-intent' && $method === 'POST') {
         CoverageRecorder::mark(51);
         $authUser = authenticateToken();
@@ -370,6 +419,12 @@ try {
         $authUser = authenticateToken();
         $ctrl = new OrderController();
         $response = $ctrl->trackingLink($authUser, $matches[1]);
+    }
+    elseif (preg_match('#^/orders/(\d+)/receipt$#', $path, $matches) && $method === 'GET') {
+        CoverageRecorder::mark(106);
+        $authUser = authenticateToken();
+        $ctrl = new OrderController();
+        $response = $ctrl->receipt($authUser, $matches[1]);
     }
     elseif (preg_match('#^/orders/(\d+)$#', $path, $matches) && $method === 'GET') {
         CoverageRecorder::mark(54);
@@ -413,6 +468,12 @@ try {
         $authUser = authenticateToken();
         $ctrl = new AdminController();
         $response = $ctrl->users($authUser);
+    }
+    elseif (preg_match('#^/admin/users/(\d+)/statement$#', $path, $matches) && $method === 'GET') {
+        CoverageRecorder::mark(103);
+        $authUser = authenticateToken();
+        $ctrl = new AdminController();
+        $response = $ctrl->userStatement($authUser, $matches[1]);
     }
     elseif (preg_match('#^/admin/users/(\d+)/role$#', $path, $matches) && $method === 'PUT') {
         CoverageRecorder::mark(61);

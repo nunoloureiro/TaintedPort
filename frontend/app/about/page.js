@@ -116,6 +116,7 @@ export default function AboutPage() {
             </p>
             <div className="space-y-5">
               {[
+                { v: '1.40', title: 'Vouchers, invoices & account tools', desc: 'Cash-out vouchers that convert store credit into shareable codes; downloadable order invoices and per-customer account statements; a syndicated wine feed with exportable reports; newsletter sign-up previews; and a "remember me" option for persistent sign-in.' },
                 { v: '1.39', title: 'Platform improvements', desc: 'Backend reliability and deployment-configuration improvements.' },
                 { v: '1.31', title: 'Online payments', desc: 'Credit-card checkout via Stripe, plus pay-on-delivery, with automatic order-status updates.' },
                 { v: '1.26', title: 'Gift cards & tracking', desc: 'Gift cards with store credit, and shareable order-tracking links.' },

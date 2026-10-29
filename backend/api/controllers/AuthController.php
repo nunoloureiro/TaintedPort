@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../config/jwt.php';
 require_once __DIR__ . '/../config/totp.php';
+require_once __DIR__ . '/../config/remember.php';
 
 class AuthController {
     private $user;
@@ -114,11 +115,57 @@ class AuthController {
             ]
         ];
 
+        if (!empty($data['remember'])) {
+            $response['remember_token'] = RememberToken::issue($user['id']);
+        }
+
         if (!empty($data['redirect'])) {
             $response['redirect_url'] = $data['redirect'];
         }
 
         return $response;
+    }
+
+    /**
+     * Log a returning user back in from their "remember me" token, skipping
+     * password + 2FA. The token is authenticated (AES-256-GCM), so a forged
+     * token fails to decrypt and is rejected.
+     */
+    public function loginWithRemember() {
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (empty($data['remember_token'])) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'remember_token is required.'];
+        }
+
+        $claims = RememberToken::verify($data['remember_token']);
+        if (!$claims) {
+            http_response_code(401);
+            return ['success' => false, 'message' => 'Invalid or expired remember token.'];
+        }
+
+        $user = $this->user->findById($claims['user_id']);
+        if (!$user) {
+            http_response_code(401);
+            return ['success' => false, 'message' => 'Invalid or expired remember token.'];
+        }
+
+        $isAdmin = !empty($user['is_admin']) && $user['is_admin'] == 1;
+        $role = isset($user['role']) ? $user['role'] : ($isAdmin ? 'admin' : 'user');
+        $token = JWT::encode(['user_id' => $user['id'], 'email' => $user['email'], 'is_admin' => $isAdmin, 'role' => $role]);
+
+        return [
+            'success' => true,
+            'token' => $token,
+            'user' => [
+                'id' => $user['id'],
+                'name' => $user['name'],
+                'email' => $user['email'],
+                'is_admin' => $isAdmin,
+                'role' => $role,
+            ],
+        ];
     }
 
     public function me($authUser) {
@@ -159,6 +206,10 @@ class AuthController {
         $targetUserId = isset($data['user_id']) ? intval($data['user_id']) : $authUser['user_id'];
 
         $this->user->updateName($targetUserId, $name);
+
+        if (isset($data['company'])) {
+            $this->user->updateCompany($targetUserId, (string) $data['company']);
+        }
 
         if (isset($data['role'])) {
             $this->user->updateRole($targetUserId, $data['role']);

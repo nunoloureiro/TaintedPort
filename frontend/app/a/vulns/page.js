@@ -28,12 +28,14 @@ function parseVulnerabilities(raw) {
   let summaryTable = [];
   let businessTable = [];
   let aiTable = [];
+  let decoyTable = [];
   let chainsTable = [];
   let notesLines = [];
   let inNotes = false;
   let inSummaryTable = false;
   let inBusinessTable = false;
   let inAiTable = false;
+  let inDecoyTable = false;
   let inChainsTable = false;
   let currentTableContext = 'standard';
 
@@ -64,10 +66,17 @@ function parseVulnerabilities(raw) {
       currentTableContext = 'ai';
       continue;
     }
+    if (line.startsWith('DECOYS')) {
+      currentTableContext = 'decoy';
+      if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
+      if (currentChain) { chainSections.push(currentChain); currentChain = null; }
+      continue;
+    }
 
-    if (line.startsWith('#') && line.includes('VULNERABILITY') && line.includes('LOCATION')) {
+    if (line.startsWith('#') && (line.includes('VULNERABILITY') || line.includes('DECOY')) && line.includes('LOCATION')) {
       if (currentTableContext === 'business') inBusinessTable = true;
       else if (currentTableContext === 'ai') inAiTable = true;
+      else if (currentTableContext === 'decoy') inDecoyTable = true;
       else inSummaryTable = true;
       continue;
     }
@@ -75,12 +84,13 @@ function parseVulnerabilities(raw) {
       inChainsTable = true;
       continue;
     }
-    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable || inChainsTable)) continue;
+    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable)) continue;
 
-    if ((inSummaryTable || inBusinessTable || inAiTable || inChainsTable) && line.trim() === '') {
+    if ((inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable) && line.trim() === '') {
       inSummaryTable = false;
       inBusinessTable = false;
       inAiTable = false;
+      inDecoyTable = false;
       inChainsTable = false;
       continue;
     }
@@ -98,8 +108,8 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    if ((inSummaryTable || inBusinessTable || inAiTable) && line.trim()) {
-      const match = line.match(/^(\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
+    if ((inSummaryTable || inBusinessTable || inAiTable || inDecoyTable) && line.trim()) {
+      const match = line.match(/^([A-Za-z]?\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
       if (match) {
         const entry = {
           id: match[1],
@@ -110,6 +120,7 @@ function parseVulnerabilities(raw) {
         };
         if (inBusinessTable) businessTable.push(entry);
         else if (inAiTable) aiTable.push(entry);
+        else if (inDecoyTable) decoyTable.push(entry);
         else summaryTable.push(entry);
       }
       continue;
@@ -132,7 +143,7 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    const vulnMatch = line.match(/^(\d+\w?)\.\s+(.+)/);
+    const vulnMatch = line.match(/^([A-Za-z]?\d+\w?)\.\s+(.+)/);
     if (vulnMatch) {
       if (currentChain) { chainSections.push(currentChain); currentChain = null; }
       if (currentVuln) sections.push(currentVuln);
@@ -157,7 +168,7 @@ function parseVulnerabilities(raw) {
   if (currentVuln) sections.push(currentVuln);
   if (currentChain) chainSections.push(currentChain);
 
-  return { summaryTable, businessTable, aiTable, chainsTable, sections, chainSections, notesLines };
+  return { summaryTable, businessTable, aiTable, decoyTable, chainsTable, sections, chainSections, notesLines };
 }
 
 function VulnDetail({ detail }) {
@@ -480,15 +491,17 @@ export default function VulnsPage() {
     );
   }
 
-  const { summaryTable, businessTable, aiTable, chainsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
+  const { summaryTable, businessTable, aiTable, decoyTable, chainsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
 
   const commodityIds = new Set(summaryTable.map(v => v.id));
   const businessIds = new Set(businessTable.map(v => v.id));
   const aiIds = new Set(aiTable.map(v => v.id));
+  const decoyIds = new Set(decoyTable.map(v => v.id));
 
   const commodityVulns = sections.filter(s => commodityIds.has(s.id));
   const businessVulns = sections.filter(s => businessIds.has(s.id));
   const aiVulns = sections.filter(s => aiIds.has(s.id));
+  const decoyVulns = sections.filter(s => decoyIds.has(s.id));
 
   // The severity filter only narrows the summary tables (the lists) —
   // detail cards below always show everything. Each ID in a list already
@@ -663,10 +676,11 @@ export default function VulnsPage() {
               <span className="text-zinc-500 text-sm font-normal">({aiTable.length})</span>
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
-              Not app vulnerabilities &mdash; these are decoys planted in the app&apos;s own content to
-              test whether an AI/LLM-based client (scanner, agent, assistant) consuming that content
-              is vulnerable to prompt injection. The application itself is not vulnerable; the
-              payloads target the AI tool reading the data.
+              Not app vulnerabilities &mdash; and distinct from the Decoys below. These are
+              prompt-injection payloads planted in the app&apos;s own content to test whether an
+              AI/LLM-based client (scanner, agent, assistant) consuming that content is vulnerable to
+              prompt injection. The application itself is not vulnerable; the payloads target the
+              AI tool reading the data, not the app.
             </p>
             <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -682,6 +696,39 @@ export default function VulnsPage() {
                   </thead>
                   <tbody>
                     {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Decoys (False-Positive Traps) Summary Table — not severity-filtered, always shown in full */}
+        {decoyTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-blue-400">&#9632;</span> Decoys (False-Positive Traps)
+              <span className="text-zinc-500 text-sm font-normal">({decoyTable.length})</span>
+            </h2>
+            <p className="text-zinc-500 text-sm mb-4">
+              Not vulnerabilities &mdash; these constructs look exploitable but are not. A finding
+              reported against any decoy below is a <span className="text-blue-300">false positive</span>
+              &nbsp;and counts against a tool&apos;s precision. Each is debunkable from the source alone.
+            </p>
+            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-dark-border bg-dark-lighter/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Decoy</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {decoyTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
                   </tbody>
                 </table>
               </div>
@@ -733,6 +780,18 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Decoy Details */}
+        {decoyVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-blue-400">&#9632;</span> Decoy Details
+            </h2>
+            <div className="grid gap-4">
+              {decoyVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}

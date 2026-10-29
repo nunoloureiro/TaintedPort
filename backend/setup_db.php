@@ -25,6 +25,7 @@ CREATE TABLE users (
     totp_enabled INTEGER DEFAULT 0,
     reset_token_issued_at INTEGER DEFAULT NULL,
     account_credit REAL DEFAULT 0,
+    company TEXT NOT NULL DEFAULT \'\',
     welcome_gift_claimed INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

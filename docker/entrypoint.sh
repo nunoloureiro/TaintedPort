@@ -47,6 +47,24 @@ echo "[init] htpasswd seeded for user '$ADMIN_USER'"
     echo "[init] FATAL: php-fpm is probably listening on TCP — check /usr/local/etc/php-fpm.d/www.conf" >&2
 ) &
 
+# Provision any runtime secret the operator didn't supply, so a bare
+# `docker run` still has fully-working features. Operator-supplied values
+# (docker run -e ... / --env-file) always win; the app still fails closed on a
+# genuinely-empty value, this only fills the gap for a plain build.
+provision_secret() {   # $1 = env var name, $2 = length in hex chars
+    eval "cur=\$$1"
+    if [ -z "$cur" ]; then
+        val=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c "$2")
+        export "$1=$val"
+        echo "[init] provisioned $1"
+    fi
+}
+provision_secret JWT_SIGNING_SECRET 48
+provision_secret GIFTCARD_AES_KEY 16
+provision_secret TRACKING_LINK_SECRET 14
+provision_secret REMEMBER_TOKEN_KEY 64
+provision_secret VOUCHER_SIGNING_KEY 16
+
 echo "[init] Starting services..."
 
 exec "$@"

@@ -29,7 +29,16 @@ ARG API_URL=https://api.taintedport.com
 ARG APP_VERSION=dev
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+# A TLS-intercepting egress proxy re-signs the npm registry certificate with a
+# private root the container doesn't trust, so npm ci can't verify the chain and
+# fails the fetch — sometimes still exiting 0 with an incomplete install (no
+# node_modules/.bin/next, which then breaks `next build`). Pass that root as an
+# optional build secret (id=corp_ca) so Node trusts it for this step only. Absent
+# (plain builds / direct internet) it's a no-op, and the cert is never written
+# into an image layer or this repo. build.sh wires the secret in automatically.
+RUN --mount=type=secret,id=corp_ca \
+    if [ -s /run/secrets/corp_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/corp_ca; fi; \
+    npm ci
 
 COPY frontend/ ./
 
@@ -50,19 +59,49 @@ ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
 # Install nginx, supervisor, sqlite and dev libs for PHP extensions.
-RUN apk update && apk add --no-cache \
-    nginx \
-    apache2-utils \
-    supervisor \
-    nodejs \
-    sqlite \
-    sqlite-dev
+# Alpine's package mirrors are HTTPS, so the same TLS-intercepting proxy that
+# breaks npm in stage 1 breaks apk too: apk update reports the index as
+# "untrusted" (and still exits 0), then apk add finds no packages. If the
+# corp_ca secret is supplied, trust it for this step only, restoring the stock
+# CA bundle afterwards so the private root is never baked into the published
+# image. A no-op when the secret is absent.
+RUN --mount=type=secret,id=corp_ca \
+    if [ -s /run/secrets/corp_ca ]; then \
+        cp /etc/ssl/certs/ca-certificates.crt /tmp/ca-certificates.crt.orig; \
+        cat /run/secrets/corp_ca >> /etc/ssl/certs/ca-certificates.crt; \
+    fi; \
+    apk update && apk add --no-cache \
+        nginx \
+        apache2-utils \
+        supervisor \
+        nodejs \
+        sqlite \
+        sqlite-dev; \
+    apk_status=$?; \
+    if [ -f /tmp/ca-certificates.crt.orig ]; then \
+        mv /tmp/ca-certificates.crt.orig /etc/ssl/certs/ca-certificates.crt; \
+    fi; \
+    exit $apk_status
 
 # Local config/service-discovery agent
 COPY --from=consul /bin/consul /usr/local/bin/consul
 
-# Install PHP SQLite extension
-RUN docker-php-ext-install pdo pdo_sqlite
+# Install PHP SQLite extension. docker-php-ext-install shells out to apk to pull
+# its .phpize-deps build toolchain (gcc, make, autoconf, …), so under a
+# TLS-intercepting proxy it hits the same untrusted-cert failure as the apk step
+# above — trust the corp_ca secret for this step only and restore the stock CA
+# bundle afterwards. A no-op when the secret is absent.
+RUN --mount=type=secret,id=corp_ca \
+    if [ -s /run/secrets/corp_ca ]; then \
+        cp /etc/ssl/certs/ca-certificates.crt /tmp/ca-certificates.crt.orig; \
+        cat /run/secrets/corp_ca >> /etc/ssl/certs/ca-certificates.crt; \
+    fi; \
+    docker-php-ext-install pdo pdo_sqlite; \
+    ext_status=$?; \
+    if [ -f /tmp/ca-certificates.crt.orig ]; then \
+        mv /tmp/ca-certificates.crt.orig /etc/ssl/certs/ca-certificates.crt; \
+    fi; \
+    exit $ext_status
 
 # ---------- PHP backend ----------
 # NOTE: no secrets are baked into this (public) image. Supply them at run time

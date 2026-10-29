@@ -2,6 +2,18 @@
 
 class ContactController {
 
+    public function newsletterPreview() {
+        $email = isset($_GET['email']) ? $_GET['email'] : '';
+        $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+        header('Content-Type: text/html; charset=UTF-8');
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
+           . '<title>Newsletter Preview - TaintedPort</title></head><body>'
+           . '<p>A preview of the TaintedPort newsletter was prepared for '
+           . '<strong>' . $safeEmail . '</strong>.</p>'
+           . '</body></html>';
+        exit;
+    }
+
     public function preview() {
         $name = isset($_POST['name']) ? $_POST['name'] : '';
         $email = isset($_POST['email']) ? $_POST['email'] : '';

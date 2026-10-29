@@ -35,6 +35,11 @@ yarn-error.log*
 backend/uploads/wines/*
 !backend/uploads/wines/.gitkeep
 
+# runtime-generated export/snapshot artifacts (keep the seeded catalog CSV)
+backend/exports/*
+!backend/exports/wines-catalog.csv
+backend/data/cart-exports/
+
 # vercel
 .vercel
 

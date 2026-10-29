@@ -11,8 +11,6 @@ import { orderAPI, discountAPI, paymentAPI } from '@/lib/api';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 
-// Publishable keys are safe to ship to the browser; the .env value overrides
-// this fallback so the demo works out of the box.
 const STRIPE_PK =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
   'pk_test_51UFzKeFjrKiRZbyXSpCq8zcBCi5ipwMX9pTVxFZdJ218xvv1YPypyyklo1vCd4hnECpsnot8fbXUN5V8gTvYoRzx008xoUNp7J';

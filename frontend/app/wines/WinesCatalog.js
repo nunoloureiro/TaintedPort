@@ -10,7 +10,7 @@ export default function WinesCatalog() {
   const [wines, setWines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchMessage, setSearchMessage] = useState('');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [region, setRegion] = useState(searchParams.get('region') || '');
   const [type, setType] = useState('');
   const [sort, setSort] = useState('name_asc');

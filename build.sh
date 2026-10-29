@@ -64,6 +64,19 @@ if [ -f "$VULNS_CONTEXT/KnownVulnerabilities.txt" ]; then
     BUILD_ARGS+=(--build-context "vulns=$VULNS_CONTEXT")
 fi
 
+# Behind a TLS-intercepting egress proxy, in-container npm/apk can't verify the
+# re-signed registry/mirror certificates and the build fails (see Dockerfile).
+# If a corporate CA bundle is available — the CORP_CA env var, else whatever npm
+# is already configured to trust (`npm config get cafile`) — hand it to the
+# build as a secret so those steps trust it. Harmless on a direct connection,
+# and a no-op when no such bundle is configured.
+SECRET_ARGS=()
+CORP_CA="${CORP_CA:-$(npm config get cafile 2>/dev/null)}"
+if [ -n "$CORP_CA" ] && [ "$CORP_CA" != "null" ] && [ -f "$CORP_CA" ]; then
+    SECRET_ARGS+=(--secret "id=corp_ca,src=$CORP_CA")
+    echo -e "  ${DIM}Using corp CA bundle for build: $CORP_CA${NC}"
+fi
+
 # ── Vuln-leak guard ───────────────────────────────────────────
 # Refuse to build/ship if private vuln answer-key content has leaked into
 # the public source tree. See tests/check_no_vuln_leak.py.
@@ -107,6 +120,7 @@ echo -e "  ${DIM}─────────────────────
 
 docker buildx build \
     "${BUILD_ARGS[@]}" \
+    "${SECRET_ARGS[@]}" \
     --platform linux/amd64 \
     --no-cache \
     -t "$IMAGE" \

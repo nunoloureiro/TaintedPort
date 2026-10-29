@@ -63,7 +63,7 @@ export default function AdminTeamPage() {
           {users.map((u) => (
             <div key={u.id} className="flex items-center justify-between p-5">
               <div>
-                <p className="text-white font-medium">{u.name}</p>
+                <p className="text-white font-medium" dangerouslySetInnerHTML={{ __html: u.name }} />
                 <p className="text-zinc-500 text-sm">{u.email}</p>
               </div>
               <div className="flex items-center gap-3">

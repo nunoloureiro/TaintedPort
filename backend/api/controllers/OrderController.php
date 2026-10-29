@@ -67,6 +67,59 @@ class OrderController {
         return ['success' => true, 'order' => $order];
     }
 
+    /**
+     * Downloadable invoice for one of the caller's own orders. The order the
+     * caller is authorized for is resolved from the request's `id` scope before
+     * the invoice body is loaded.
+     */
+    public function invoice($authUser) {
+        $scope = self::queryScope('id');
+        if ($scope === null) {
+            http_response_code(400);
+            return ['success' => false, 'message' => 'id is required.'];
+        }
+
+        if (!$this->order->belongsTo((int) $scope, $authUser['user_id'])) {
+            http_response_code(403);
+            return ['success' => false, 'message' => 'You do not have access to this invoice.'];
+        }
+
+        $id = isset($_GET['id']) ? (int) $_GET['id'] : (int) $scope;
+        $invoice = $this->order->getInvoice($id);
+        if (!$invoice) {
+            http_response_code(404);
+            return ['success' => false, 'message' => 'Invoice not found.'];
+        }
+
+        return ['success' => true, 'invoice' => $invoice];
+    }
+
+    /** First value supplied for a key in the raw request query string. */
+    private static function queryScope($key) {
+        $qs = isset($_SERVER['QUERY_STRING']) ? $_SERVER['QUERY_STRING'] : '';
+        foreach (explode('&', $qs) as $pair) {
+            if ($pair === '') continue;
+            $kv = explode('=', $pair, 2);
+            if (urldecode($kv[0]) === $key) {
+                return isset($kv[1]) ? urldecode($kv[1]) : '';
+            }
+        }
+        return null;
+    }
+
+    public function receipt($authUser, $orderId) {
+        if (!$this->order->belongsTo((int) $orderId, $authUser['user_id'])) {
+            http_response_code(404);
+            return ['success' => false, 'message' => 'Order not found.'];
+        }
+        $invoice = $this->order->getInvoice((int) $orderId);
+        if (!$invoice) {
+            http_response_code(404);
+            return ['success' => false, 'message' => 'Order not found.'];
+        }
+        return ['success' => true, 'receipt' => $invoice];
+    }
+
     public function create($authUser) {
         $data = json_decode(file_get_contents('php://input'), true);
 

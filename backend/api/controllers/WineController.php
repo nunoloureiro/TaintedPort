@@ -11,6 +11,52 @@ class WineController {
         $this->wine = new Wine();
     }
 
+    public function feed() {
+        $result = $this->wine->getAll([]);
+        $wines = isset($result['wines']) ? $result['wines'] : [];
+        $payload = json_encode($wines);
+        $etag = '"' . sha1($payload) . '"';
+        header('ETag: ' . $etag);
+        $inm = isset($_SERVER['HTTP_IF_NONE_MATCH']) ? trim($_SERVER['HTTP_IF_NONE_MATCH']) : '';
+        if ($inm !== '' && $inm === $etag) {
+            http_response_code(304);
+            exit;
+        }
+        return ['success' => true, 'wines' => $wines];
+    }
+
+    public function report() {
+        $format = isset($_GET['format']) ? $_GET['format'] : 'json';
+        $formatters = ['json' => 'reportAsJson', 'csv' => 'reportAsCsv', 'txt' => 'reportAsText'];
+        $formatter = isset($formatters[$format]) ? $formatters[$format] : 'reportAsJson';
+        $result = $this->wine->getAll([]);
+        $wines = isset($result['wines']) ? $result['wines'] : [];
+        return call_user_func([$this, $formatter], $wines);
+    }
+
+    private function reportAsJson($wines) {
+        return ['success' => true, 'format' => 'json', 'wines' => $wines];
+    }
+
+    private function reportAsCsv($wines) {
+        header('Content-Type: text/csv; charset=utf-8');
+        echo "id,name,region,type,price\n";
+        foreach ($wines as $w) {
+            echo intval($w['id']) . ',' . str_replace(',', ' ', $w['name']) . ','
+               . str_replace(',', ' ', $w['region']) . ',' . str_replace(',', ' ', $w['type']) . ','
+               . floatval($w['price']) . "\n";
+        }
+        exit;
+    }
+
+    private function reportAsText($wines) {
+        header('Content-Type: text/plain; charset=utf-8');
+        foreach ($wines as $w) {
+            echo $w['name'] . ' (' . $w['region'] . ', ' . $w['type'] . ') - EUR ' . floatval($w['price']) . "\n";
+        }
+        exit;
+    }
+
     public function index() {
         $params = [
             'search' => isset($_GET['search']) ? $_GET['search'] : null,

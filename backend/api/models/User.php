@@ -46,7 +46,7 @@ class User {
     }
 
     public function findById($id) {
-        $stmt = $this->db->prepare('SELECT id, name, email, is_admin, role, totp_enabled, account_credit, created_at FROM users WHERE id = :id');
+        $stmt = $this->db->prepare('SELECT id, name, email, is_admin, role, totp_enabled, account_credit, company, created_at FROM users WHERE id = :id');
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         $result = $stmt->execute();
         return $result->fetchArray(SQLITE3_ASSOC);
@@ -74,6 +74,14 @@ class User {
     public function updateName($userId, $name) {
         $stmt = $this->db->prepare('UPDATE users SET name = :name WHERE id = :id');
         $stmt->bindValue(':name', $name, SQLITE3_TEXT);
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
+        return true;
+    }
+
+    public function updateCompany($userId, $company) {
+        $stmt = $this->db->prepare('UPDATE users SET company = :company WHERE id = :id');
+        $stmt->bindValue(':company', $company, SQLITE3_TEXT);
         $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
         $stmt->execute();
         return true;

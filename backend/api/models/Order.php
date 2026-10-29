@@ -153,6 +153,40 @@ class Order {
         return $orderId;
     }
 
+    public function belongsTo($orderId, $userId) {
+        $stmt = $this->db->prepare('SELECT 1 FROM orders WHERE id = :id AND user_id = :uid LIMIT 1');
+        $stmt->bindValue(':id', $orderId, SQLITE3_INTEGER);
+        $stmt->bindValue(':uid', $userId, SQLITE3_INTEGER);
+        return (bool) $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+    }
+
+    public function getInvoice($orderId) {
+        $stmt = $this->db->prepare(
+            'SELECT o.id, o.total, o.status, o.created_at,
+                    o.shipping_name, o.shipping_street, o.shipping_city,
+                    o.shipping_postal_code, o.shipping_phone,
+                    u.name AS customer_name, u.email AS customer_email
+             FROM orders o JOIN users u ON o.user_id = u.id
+             WHERE o.id = :id'
+        );
+        $stmt->bindValue(':id', $orderId, SQLITE3_INTEGER);
+        $order = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+        if (!$order) return null;
+
+        $stmt = $this->db->prepare('SELECT wine_name, price, quantity, subtotal FROM order_items WHERE order_id = :id');
+        $stmt->bindValue(':id', $orderId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        $items = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $row['price'] = floatval($row['price']);
+            $row['subtotal'] = floatval($row['subtotal']);
+            $items[] = $row;
+        }
+        $order['items'] = $items;
+        $order['total'] = floatval($order['total']);
+        return $order;
+    }
+
     public function getByUser($userId) {
         $stmt = $this->db->prepare(
             'SELECT o.id, o.total, o.status, o.created_at as order_date,
