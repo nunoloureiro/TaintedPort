@@ -6,37 +6,6 @@ class JWT {
     private static $algo = 'HS256';
     private static $expiry = 604800; // 7 days in seconds
 
-    private static $partnerPrivateKey = <<<'PEM'
------BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDQfECJ0BQ9h+4F
-sq/bgIdcdtK+jpkvX/CI4gZu9eoV12ORJkw4akbQbilsWpSQOpYbwt0hXqH0m6Q1
-EPvdaO95wxM/yyxVja5nVGg357SwdJ1VdYwPlox6Bh3crOtI/Z1+cX74EM/Vgmj+
-CMQJC1i07P2ooFHhbbngAD+4Zj9tyQjg2ZGpUvpqSuSRlFFHTHgCUShes/NvjUgm
-eqjrVecE3PMuvRn7o3rwlwGXltgpyOdijwLSnPJ8n5ZBefikxfVijowJIwyWLxut
-U9OTsj4dMKKkHoFbaNsODe3EXBTa7JkFihhR3ObhhuFrgUacmvIQHhiNFWKG0Aau
-+yDnfqB1AgMBAAECggEAAL67eU+yWQCUvbL4zCP+bDTfrpwmtiDVntXKT2ninAU8
-ar2IruEFE6EEbTKLCN8v/9KgJ7k23/95wYv5YKERfGHjBCfHJtmShNLgjmCW2fdm
-LKFlNE8lw1LfOgndhakj/5qFRmNxiZrcuZmuX6n91ID28keeZASYY5F5BenV/iWw
-aXR3GBv+E4An4+qWuJU9ynWaspawdbvR2uyo/XT5dn3rET7LhOtNLCfjVlPNOt9c
-YCVRzmP0oEyfZBt39o0rXjSv5kU1XCYDOB3sgTucmK/C03nqJo83OKLYHAEwoqhb
-wPMY7gvtzKhbAJSq1a6wqeIQa9OzI1NUUbujK5rTCQKBgQD3n0KL/o626GblwiXc
-JpStaUu7aFZUgSzBqXt+KR6mEQXd4LP1gs/xGE0eOr8xtXNr+PY1DdfBtpW38dIr
-+6VPqGZgstX/HUpxIZViIjGavfceQkrlTKLUf1Vp+/qMHas+6ZnbUefSqJv6V2Km
-7NHF7/GVzFd7AKGidEs1RxuJSQKBgQDXigPtQ9Mj5AM3mG28aVLL2A+2bwyOmDdj
-hEJCmoHE2i8PQ2eTuu3SIg3HAXg3ylAxWa7qjg38M7Geg2GqzbMbN/kAurhHVlpK
-Q75cGz8w/rG3GWWE1WjiE7rBaGkuetVvPHiBgbBvIAe4Bb/Rj3a3Fo8zGnB8APzS
-aUn/rs0pzQKBgGMl2J53WatxGKpMd55TsFpS++jZGSAS7NnKQ9E7I7N4w3GY5FWc
-gChYA6DkAuQjdEi6UdLibQ56Ti5t3CqSQxnHIt77HGZe0wzDVq4JZPVBtO3fu19e
-tSACsC+Unjh2NLgnDtzbSch2jKXLUYvm7QOlVIUXYbu1gAKtL+PwSd1JAoGAO/zt
-mtuFqDeNrat+3zFxGcrIlL3TgNxcjhYBWwglleQjtNvNuBAOoK1ZqEmAbAaiyxlq
-1V00Bz1b8gIe7KrTbn/ljY5qO3CNMJ4qHPh4XeqFC7DF0HKU/lb/Y1Tr8UO+o3bx
-ExpFQKhpfY4cFPcY01wz/sUdCWY891LWhZLhBwECgYEAvKEIjiWLhL3e2ziTSN3+
-SUGjjYS9Lc9APDkC9mnJt2bxIagzM8gH8hcrN66WaPBMMvTF/9F81rrELL/4EGhX
-MTlUQGyT+95WMCaJuWVP5DfwUfvIUJAntOHVrLOcje46wfiO4QGZTkh83CeKFCDf
-x55s09kxeg1ltWcg5TT9BGU=
------END PRIVATE KEY-----
-PEM;
-
     private static $partnerPublicKey = <<<'PEM'
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0HxAidAUPYfuBbKv24CH
@@ -51,6 +20,13 @@ PEM;
 
     private static function secret() {
         return Env::requireValue('JWT_SIGNING_SECRET', 32);
+    }
+
+    // Partner RS256 signing key, supplied at runtime as a base64-encoded PEM
+    // in PARTNER_JWT_PRIVATE_KEY. The matching verification key is
+    // $partnerPublicKey above.
+    private static function partnerPrivateKey() {
+        return base64_decode(Env::requireValue('PARTNER_JWT_PRIVATE_KEY', 100));
     }
 
     public static function encode($payload) {
@@ -85,7 +61,7 @@ PEM;
         $payload['exp'] = time() + self::$expiry;
         $payloadEncoded = self::base64UrlEncode(json_encode($payload));
 
-        openssl_sign("$header.$payloadEncoded", $signature, self::$partnerPrivateKey, OPENSSL_ALGO_SHA256);
+        openssl_sign("$header.$payloadEncoded", $signature, self::partnerPrivateKey(), OPENSSL_ALGO_SHA256);
 
         return "$header.$payloadEncoded." . self::base64UrlEncode($signature);
     }

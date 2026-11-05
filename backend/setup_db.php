@@ -181,6 +181,7 @@ CREATE TABLE coverage_hits (
 ');
 
 $db->exec("INSERT INTO referral_codes (code, credit_amount, max_uses) VALUES ('WELCOME10', 10.00, 1)");
+$db->exec("INSERT INTO referral_codes (code, credit_amount, max_uses) VALUES ('FRIEND5', 5.00, 5)");
 
 $db->exec("INSERT INTO discount_codes (code, type, value, min_order_value, max_uses) VALUES ('SAVE10', 'percent', 10.00, 0, 100)");
 $db->exec("INSERT INTO discount_codes (code, type, value, min_order_value, max_uses) VALUES ('PORT5', 'fixed', 5.00, 30.00, 100)");

@@ -104,16 +104,21 @@ RUN --mount=type=secret,id=corp_ca \
     exit $ext_status
 
 # ---------- PHP backend ----------
-# NOTE: no secrets are baked into this (public) image. Supply them at run time
-# (docker run -e ... or --env-file); php-fpm forwards them to workers via env[],
-# and open_basedir restricts PHP's own file access so they stay out of reach of
-# anything running inside the app. Runtime variables:
+# NOTE: no operator/production secrets are baked into this (public) image.
+# Supply them at run time (docker run -e ... or --env-file); php-fpm forwards
+# them to workers via env[], and open_basedir restricts PHP's own file access
+# so they stay out of reach of anything running inside the app. Runtime
+# variables:
 #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET  - card payments (optional; without
 #                                               them checkout falls back to
 #                                               payment-on-delivery)
 #   JWT_SIGNING_SECRET    (>= 32 bytes)        - session token signing
 #   GIFTCARD_AES_KEY      (exactly 16 bytes)   - gift-card token encryption
 #   TRACKING_LINK_SECRET  (exactly 14 bytes)   - order-tracking link signing
+#   PARTNER_JWT_PRIVATE_KEY (base64 PEM)       - partner API RS256 signing key;
+#                                               entrypoint provisions a built-in
+#                                               demo keypair's private half when
+#                                               unset (override to rotate)
 # The three below are required; their features return a server error if unset.
 COPY backend/ /var/www/backend/
 COPY openapi.yaml /var/www/backend/openapi.yaml
