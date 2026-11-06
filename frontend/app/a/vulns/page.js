@@ -10,6 +10,8 @@ const severityColors = {
   low: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
 };
 
+const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low'];
+
 function parseSeverity(text) {
   const lower = text.toLowerCase();
   if (lower.includes('critical')) return 'critical';
@@ -30,6 +32,7 @@ function parseVulnerabilities(raw) {
   let aiTable = [];
   let decoyTable = [];
   let chainsTable = [];
+  let pathsTable = [];
   let notesLines = [];
   let inNotes = false;
   let inSummaryTable = false;
@@ -37,6 +40,7 @@ function parseVulnerabilities(raw) {
   let inAiTable = false;
   let inDecoyTable = false;
   let inChainsTable = false;
+  let inPathsTable = false;
   let currentTableContext = 'standard';
 
   for (let i = 0; i < lines.length; i++) {
@@ -60,6 +64,7 @@ function parseVulnerabilities(raw) {
     }
     if (line.startsWith('CHAINED VULNERABILITIES')) {
       currentTableContext = 'chains';
+      if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
       continue;
     }
     if (line.startsWith('AI CLIENT TRAPS')) {
@@ -80,29 +85,51 @@ function parseVulnerabilities(raw) {
       else inSummaryTable = true;
       continue;
     }
-    if (line.startsWith('#') && line.includes('CHAIN') && line.includes('MEMBERS')) {
+    if (currentTableContext === 'chains' && /^CHAIN\s+NAME\s+END STEP/.test(line)) {
       inChainsTable = true;
       continue;
     }
-    if (line.startsWith('--') && line.includes('---') && (inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable)) continue;
+    if (currentTableContext === 'chains' && /^PATH\s+WAS\s+NAME/.test(line)) {
+      inPathsTable = true;
+      continue;
+    }
+    const inAnyTable = inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable || inPathsTable;
+    if (line.startsWith('--') && line.includes('---') && inAnyTable) continue;
 
-    if ((inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable) && line.trim() === '') {
+    if (inAnyTable && line.trim() === '') {
       inSummaryTable = false;
       inBusinessTable = false;
       inAiTable = false;
       inDecoyTable = false;
       inChainsTable = false;
+      inPathsTable = false;
       continue;
     }
 
+    // Chain row: id, name, the step every attack path ends on, its paths.
     if (inChainsTable && line.trim()) {
-      const match = line.match(/^(CHAIN-\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(Critical|High|Medium|Low)\s*$/);
+      const match = line.match(/^(CH-\d+)\s+(.+?)\s{2,}(#\d+\w?)\s{2,}(.+?)\s*$/);
       if (match) {
         chainsTable.push({
           id: match[1],
           name: match[2].trim(),
-          members: match[3].trim(),
-          severity: match[4].trim(),
+          endStep: match[3],
+          paths: match[4].split(',').map(p => p.trim()).filter(Boolean),
+        });
+      }
+      continue;
+    }
+
+    // Attack path row: id, former id, name, steps (execution order), severity.
+    if (inPathsTable && line.trim()) {
+      const match = line.match(/^(CH-\d+\.\d+)\s+(CHAIN-\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(Critical|High|Medium|Low)\s*$/);
+      if (match) {
+        pathsTable.push({
+          id: match[1],
+          was: match[2],
+          name: match[3].trim(),
+          members: match[4].trim(),
+          severity: match[5].trim(),
         });
       }
       continue;
@@ -131,15 +158,16 @@ function parseVulnerabilities(raw) {
     if (line.startsWith('DETAILED DESCRIPTIONS')) continue;
     if (line.startsWith('NOTE:') && currentTableContext === 'ai') continue;
 
-    const chainMatch = line.match(/^(CHAIN-\d+):\s+(.+)/);
-    if (chainMatch) {
+    // Attack path writeups: "CH-01.2 (was CHAIN-008): title". Retired paths
+    // keep their old heading: "CHAIN-004: title".
+    const pathMatch = line.match(/^(CH-\d+\.\d+) \(was (CHAIN-\d+)\):\s+(.+)/);
+    const retiredMatch = !pathMatch && line.match(/^(CHAIN-\d+):\s+(.+)/);
+    if (pathMatch || retiredMatch) {
       if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
       if (currentChain) chainSections.push(currentChain);
-      currentChain = {
-        id: chainMatch[1],
-        title: chainMatch[2].trim(),
-        details: [],
-      };
+      currentChain = pathMatch
+        ? { id: pathMatch[1], was: pathMatch[2], title: pathMatch[3].trim(), details: [] }
+        : { id: retiredMatch[1], title: retiredMatch[2].trim(), details: [] };
       continue;
     }
 
@@ -168,7 +196,16 @@ function parseVulnerabilities(raw) {
   if (currentVuln) sections.push(currentVuln);
   if (currentChain) chainSections.push(currentChain);
 
-  return { summaryTable, businessTable, aiTable, decoyTable, chainsTable, sections, chainSections, notesLines };
+  // A chain's severity is the highest among its attack paths.
+  for (const chain of chainsTable) {
+    const ranked = pathsTable
+      .filter(p => chain.paths.includes(p.id))
+      .map(p => p.severity)
+      .sort((a, b) => ALL_SEVERITIES.indexOf(parseSeverity(a)) - ALL_SEVERITIES.indexOf(parseSeverity(b)));
+    chain.severity = ranked[0] || '';
+  }
+
+  return { summaryTable, businessTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines };
 }
 
 function VulnDetail({ detail }) {
@@ -338,24 +375,51 @@ function MemberLinks({ value }) {
   );
 }
 
+function SeverityBadge({ text }) {
+  const severity = parseSeverity(text);
+  if (!severity) return null;
+  return (
+    <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${severityColors[severity]}`}>
+      {text}
+    </span>
+  );
+}
+
 function ChainSummaryRow({ chain }) {
-  const severity = parseSeverity(chain.severity);
   return (
     <tr className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors">
-      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm">
-        <a href={`#chain-${chain.id}`} className="hover:underline">{chain.id}</a>
-      </td>
+      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm whitespace-nowrap">{chain.id}</td>
       <td className="px-4 py-3 text-white text-sm font-medium">{chain.name}</td>
       <td className="px-4 py-3 text-xs font-mono">
-        <MemberLinks value={chain.members} />
+        <MemberLinks value={chain.endStep} />
       </td>
-      <td className="px-4 py-3">
-        {severity && (
-          <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${severityColors[severity]}`}>
-            {chain.severity}
+      <td className="px-4 py-3 text-xs font-mono">
+        {chain.paths.map((p, i) => (
+          <span key={p}>
+            {i > 0 && ', '}
+            <a href={`#path-${p}`} className="text-accent-purple hover:text-accent-purple-light underline underline-offset-2 whitespace-nowrap">{p}</a>
           </span>
-        )}
+        ))}
       </td>
+      <td className="px-4 py-3"><SeverityBadge text={chain.severity} /></td>
+    </tr>
+  );
+}
+
+function PathSummaryRow({ path, hasWriteup }) {
+  return (
+    <tr id={`path-${path.id}`} className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors scroll-mt-20">
+      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm whitespace-nowrap">
+        {hasWriteup
+          ? <a href={`#chain-${path.id}`} className="hover:underline">{path.id}</a>
+          : path.id}
+      </td>
+      <td className="px-4 py-3 text-zinc-500 text-xs font-mono whitespace-nowrap">{path.was}</td>
+      <td className="px-4 py-3 text-white text-sm font-medium">{path.name}</td>
+      <td className="px-4 py-3 text-xs font-mono">
+        <MemberLinks value={path.members} />
+      </td>
+      <td className="px-4 py-3"><SeverityBadge text={path.severity} /></td>
     </tr>
   );
 }
@@ -365,7 +429,7 @@ function ChainDetail({ chain }) {
   let description = [];
   let currentBlock = null;
   let currentKv = null;
-  const singleLineKeys = ['Members', 'Weight'];
+  const singleLineKeys = ['Members', 'Severity', 'Status', 'Source'];
 
   for (const line of chain.details) {
     let matched = false;
@@ -397,7 +461,10 @@ function ChainDetail({ chain }) {
         <span className="flex-shrink-0 px-2.5 h-8 rounded-lg bg-accent-purple/20 text-accent-purple font-bold text-xs flex items-center justify-center font-mono whitespace-nowrap">
           {chain.id}
         </span>
-        <h3 className="text-white font-semibold text-lg leading-tight">{chain.title}</h3>
+        <h3 className="text-white font-semibold text-lg leading-tight">
+          {chain.title}
+          {chain.was && <span className="ml-2 text-zinc-500 text-xs font-mono font-normal">(was {chain.was})</span>}
+        </h3>
       </div>
 
       {kvPairs.length > 0 && (
@@ -421,8 +488,6 @@ function ChainDetail({ chain }) {
     </div>
   );
 }
-
-const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low'];
 
 export default function VulnsPage() {
   const version = process.env.NEXT_PUBLIC_APP_VERSION || 'dev';
@@ -491,7 +556,8 @@ export default function VulnsPage() {
     );
   }
 
-  const { summaryTable, businessTable, aiTable, decoyTable, chainsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
+  const { summaryTable, businessTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
+  const writeupIds = new Set(chainSections.map(c => c.id));
 
   const commodityIds = new Set(summaryTable.map(v => v.id));
   const businessIds = new Set(businessTable.map(v => v.id));
@@ -510,6 +576,7 @@ export default function VulnsPage() {
   const filteredCommodityTable = summaryTable.filter(v => matchesFilter(v.severity));
   const filteredBusinessTable = businessTable.filter(v => matchesFilter(v.severity));
   const filteredChainsTable = chainsTable.filter(c => matchesFilter(c.severity));
+  const filteredPathsTable = pathsTable.filter(p => matchesFilter(p.severity));
 
   return (
     <div className="min-h-screen bg-pattern">
@@ -641,8 +708,10 @@ export default function VulnsPage() {
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
               A chain combines two or more of the vulnerabilities above into a bigger outcome
-              &mdash; typically full account takeover or admin access &mdash; that neither member
-              reaches alone. Click a chain or a member ID below to jump to its full writeup.
+              &mdash; typically full account takeover or admin access &mdash; that no single step
+              reaches alone. A chain is identified by the step it ends on; each different route to
+              that step is one of its attack paths, listed below in execution order. Click an ID
+              to jump to its attack paths or full writeup.
             </p>
             {filteredChainsTable.length > 0 ? (
               <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
@@ -652,7 +721,8 @@ export default function VulnsPage() {
                       <tr className="border-b border-dark-border bg-dark-lighter/50">
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Chain</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Members</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">End step</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Attack paths</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
                       </tr>
                     </thead>
@@ -664,6 +734,32 @@ export default function VulnsPage() {
               </div>
             ) : (
               <p className="text-zinc-500 text-sm">No chains match the selected severities.</p>
+            )}
+
+            {filteredPathsTable.length > 0 && (
+              <>
+                <h3 className="text-base font-semibold text-white mt-8 mb-3">
+                  Attack Paths <span className="text-zinc-500 text-sm font-normal">({filteredPathsTable.length})</span>
+                </h3>
+                <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-dark-border bg-dark-lighter/50">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Path</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Was</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Steps</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPathsTable.map(p => <PathSummaryRow key={p.id} path={p} hasWriteup={writeupIds.has(p.id)} />)}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -712,8 +808,8 @@ export default function VulnsPage() {
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
               Not vulnerabilities &mdash; these constructs look exploitable but are not. A finding
-              reported against any decoy below is a <span className="text-blue-300">false positive</span>
-              &nbsp;and counts against a tool&apos;s precision. Each is debunkable from the source alone.
+              reported against any decoy below is a <span className="text-blue-300">false positive</span>.
+              Each is debunkable from the source alone.
             </p>
             <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -764,7 +860,7 @@ export default function VulnsPage() {
         {chainSections.length > 0 && (
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-accent-purple">&#9632;</span> Chain Details
+              <span className="text-accent-purple">&#9632;</span> Attack Path Details
             </h2>
             <div className="grid gap-4">
               {chainSections.map(c => <ChainDetail key={c.id} chain={c} />)}
