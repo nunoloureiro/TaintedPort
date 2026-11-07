@@ -27,6 +27,7 @@ CREATE TABLE users (
     account_credit REAL DEFAULT 0,
     company TEXT NOT NULL DEFAULT \'\',
     welcome_gift_claimed INTEGER DEFAULT 0,
+    promo_voucher_claimed INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -162,6 +163,15 @@ CREATE TABLE support_messages (
 CREATE TABLE redeemed_gift_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id TEXT UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    redeemed_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE redeemed_vouchers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
     user_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     redeemed_at INTEGER NOT NULL,
