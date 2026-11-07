@@ -8,6 +8,9 @@ class Database {
         $dbPath = __DIR__ . '/../../database.db';
         $this->db = new SQLite3($dbPath);
         $this->db->enableExceptions(true);
+        // php-fpm serves requests in parallel: a writer that finds the database
+        // locked waits up to 5s for it instead of failing straight away.
+        $this->db->busyTimeout(5000);
         $this->db->exec('PRAGMA journal_mode=WAL');
         $this->db->exec('PRAGMA foreign_keys=ON');
     }
