@@ -385,42 +385,62 @@ function SeverityBadge({ text }) {
   );
 }
 
-function ChainSummaryRow({ chain }) {
+// One table, grouped like the catalog: a header row per chain, then one row
+// per attack path with its steps in execution order (the last step, where
+// every path of the chain ends, is highlighted).
+function ChainGroupRows({ chain, paths, writeupIds }) {
   return (
-    <tr className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors">
-      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm whitespace-nowrap">{chain.id}</td>
-      <td className="px-4 py-3 text-white text-sm font-medium">{chain.name}</td>
-      <td className="px-4 py-3 text-xs font-mono">
-        <MemberLinks value={chain.endStep} />
-      </td>
-      <td className="px-4 py-3 text-xs font-mono">
-        {chain.paths.map((p, i) => (
-          <span key={p}>
-            {i > 0 && ', '}
-            <a href={`#path-${p}`} className="text-accent-purple hover:text-accent-purple-light underline underline-offset-2 whitespace-nowrap">{p}</a>
-          </span>
-        ))}
-      </td>
-      <td className="px-4 py-3"><SeverityBadge text={chain.severity} /></td>
-    </tr>
+    <>
+      <tr className="border-b border-dark-border bg-dark-lighter/50">
+        <td colSpan={4} className="px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-accent-purple font-mono font-bold text-sm">{chain.id}</span>
+            <span className="text-white text-sm font-semibold">{chain.name}</span>
+            <SeverityBadge text={chain.severity} />
+            <span className="text-zinc-500 text-xs">
+              {paths.length} attack path{paths.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </td>
+      </tr>
+      {paths.map(path => (
+        <tr key={path.id} id={`path-${path.id}`} className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors scroll-mt-20">
+          <td className="pl-8 pr-4 py-3 font-mono text-sm whitespace-nowrap" title={`was ${path.was}`}>
+            {writeupIds.has(path.id)
+              ? <a href={`#chain-${path.id}`} className="text-accent-purple hover:underline">{path.id}</a>
+              : <span className="text-zinc-400">{path.id}</span>}
+          </td>
+          <td className="px-4 py-3 text-xs font-mono whitespace-nowrap">
+            <PathSteps value={path.members} />
+          </td>
+          <td className="px-4 py-3 text-zinc-300 text-sm">{path.name}</td>
+          <td className="px-4 py-3"><SeverityBadge text={path.severity} /></td>
+        </tr>
+      ))}
+    </>
   );
 }
 
-function PathSummaryRow({ path, hasWriteup }) {
+function PathSteps({ value }) {
+  const steps = value.split('+').map(v => v.trim()).filter(Boolean);
   return (
-    <tr id={`path-${path.id}`} className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors scroll-mt-20">
-      <td className="px-4 py-3 text-accent-purple font-mono font-bold text-sm whitespace-nowrap">
-        {hasWriteup
-          ? <a href={`#chain-${path.id}`} className="hover:underline">{path.id}</a>
-          : path.id}
-      </td>
-      <td className="px-4 py-3 text-zinc-500 text-xs font-mono whitespace-nowrap">{path.was}</td>
-      <td className="px-4 py-3 text-white text-sm font-medium">{path.name}</td>
-      <td className="px-4 py-3 text-xs font-mono">
-        <MemberLinks value={path.members} />
-      </td>
-      <td className="px-4 py-3"><SeverityBadge text={path.severity} /></td>
-    </tr>
+    <>
+      {steps.map((step, i) => {
+        const id = step.replace('#', '');
+        const isEnd = i === steps.length - 1;
+        return (
+          <span key={step}>
+            {i > 0 && <span className="text-zinc-600"> &rarr; </span>}
+            <a
+              href={`#vuln-${id}`}
+              className={`underline underline-offset-2 ${isEnd ? 'text-accent-purple-light font-bold' : 'text-accent-purple hover:text-accent-purple-light'}`}
+            >
+              {step}
+            </a>
+          </span>
+        );
+      })}
+    </>
   );
 }
 
@@ -576,7 +596,6 @@ export default function VulnsPage() {
   const filteredCommodityTable = summaryTable.filter(v => matchesFilter(v.severity));
   const filteredBusinessTable = businessTable.filter(v => matchesFilter(v.severity));
   const filteredChainsTable = chainsTable.filter(c => matchesFilter(c.severity));
-  const filteredPathsTable = pathsTable.filter(p => matchesFilter(p.severity));
 
   return (
     <div className="min-h-screen bg-pattern">
@@ -704,30 +723,39 @@ export default function VulnsPage() {
           <div className="mb-12">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-accent-purple">&#9632;</span> Vulnerability Chains
-              <span className="text-zinc-500 text-sm font-normal">({filteredChainsTable.length})</span>
+              <span className="text-zinc-500 text-sm font-normal">
+                ({filteredChainsTable.length} chains, {filteredChainsTable.reduce((n, c) => n + c.paths.length, 0)} attack paths)
+              </span>
             </h2>
             <p className="text-zinc-500 text-sm mb-4">
               A chain combines two or more of the vulnerabilities above into a bigger outcome
               &mdash; typically full account takeover or admin access &mdash; that no single step
               reaches alone. A chain is identified by the step it ends on; each different route to
-              that step is one of its attack paths, listed below in execution order. Click an ID
-              to jump to its attack paths or full writeup.
+              that step is one of its attack paths, with its steps listed in execution order (the
+              highlighted step is where the chain ends). Click a path to open its writeup, or a step
+              to open that vulnerability.
             </p>
             {filteredChainsTable.length > 0 ? (
               <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-dark-border bg-dark-lighter/50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Chain</th>
+                      <tr className="border-b border-dark-border">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Attack path</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Steps</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">End step</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Attack paths</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredChainsTable.map(c => <ChainSummaryRow key={c.id} chain={c} />)}
+                      {filteredChainsTable.map(c => (
+                        <ChainGroupRows
+                          key={c.id}
+                          chain={c}
+                          paths={pathsTable.filter(p => c.paths.includes(p.id))}
+                          writeupIds={writeupIds}
+                        />
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -735,67 +763,6 @@ export default function VulnsPage() {
             ) : (
               <p className="text-zinc-500 text-sm">No chains match the selected severities.</p>
             )}
-
-            {filteredPathsTable.length > 0 && (
-              <>
-                <h3 className="text-base font-semibold text-white mt-8 mb-3">
-                  Attack Paths <span className="text-zinc-500 text-sm font-normal">({filteredPathsTable.length})</span>
-                </h3>
-                <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-dark-border bg-dark-lighter/50">
-                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Path</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Was</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Steps</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredPathsTable.map(p => <PathSummaryRow key={p.id} path={p} hasWriteup={writeupIds.has(p.id)} />)}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* AI Client Traps Summary Table — not affected by the severity filter, always shown in full */}
-        {aiTable.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span className="text-emerald-400">&#9632;</span> AI Client Traps
-              <span className="text-zinc-500 text-sm font-normal">({aiTable.length})</span>
-            </h2>
-            <p className="text-zinc-500 text-sm mb-4">
-              Not app vulnerabilities &mdash; and distinct from the Decoys below. These are
-              prompt-injection payloads planted in the app&apos;s own content to test whether an
-              AI/LLM-based client (scanner, agent, assistant) consuming that content is vulnerable to
-              prompt injection. The application itself is not vulnerable; the payloads target the
-              AI tool reading the data, not the app.
-            </p>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-dark-border bg-dark-lighter/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Trap</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         )}
 
@@ -868,18 +835,6 @@ export default function VulnsPage() {
           </div>
         )}
 
-        {/* AI Client Trap Details */}
-        {aiVulns.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <span className="text-emerald-400">&#9632;</span> AI Client Trap Details
-            </h2>
-            <div className="grid gap-4">
-              {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
-            </div>
-          </div>
-        )}
-
         {/* Decoy Details */}
         {decoyVulns.length > 0 && (
           <div className="mb-12">
@@ -902,6 +857,53 @@ export default function VulnsPage() {
               <pre className="text-sm text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">
                 {notesLines.filter(l => l.trim()).join('\n')}
               </pre>
+            </div>
+          </div>
+        )}
+
+        {/* AI Client Traps Summary Table — not affected by the severity filter, always shown in full */}
+        {aiTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Client Traps
+              <span className="text-zinc-500 text-sm font-normal">({aiTable.length})</span>
+            </h2>
+            <p className="text-zinc-500 text-sm mb-4">
+              Not app vulnerabilities &mdash; and distinct from the Decoys below. These are
+              prompt-injection payloads planted in the app&apos;s own content to test whether an
+              AI/LLM-based client (scanner, agent, assistant) consuming that content is vulnerable to
+              prompt injection. The application itself is not vulnerable; the payloads target the
+              AI tool reading the data, not the app.
+            </p>
+            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-dark-border bg-dark-lighter/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Trap</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Client Trap Details */}
+        {aiVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-emerald-400">&#9632;</span> AI Client Trap Details
+            </h2>
+            <div className="grid gap-4">
+              {aiVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}
