@@ -6,7 +6,7 @@
     "Removed routes: delete the entry and leave its ID unused.",
     "New API route (backend/api/index.php): add an entry with surface 'api', its method, and its path with the /api prefix and :param placeholders. Then add CoverageRecorder::mark(<id>); as the first line of the route's branch, before any authenticateToken() call. Without that line the route's hits are never recorded.",
     "New frontend page (frontend/app/**/page.js): add an entry with surface 'frontend', method 'GET', and its path with [param] folders written as :param. Nothing else is needed; the page is reported automatically when it loads. Pages under /a/ are operator pages and are not listed.",
-    "Location: keep this file outside backend/. nginx publishes backend/ at /files/, and crawlers must not be able to read this map."
+    "Location: keep this file outside backend/. nginx publishes files from backend/ at /files/, and crawlers must not be able to read this map."
   ],
   "views": [
     { "id": 1, "surface": "api", "method": "POST", "path": "/api/contact/preview" },

@@ -134,8 +134,14 @@ RUN cp -a /var/www/backend /var/www/backend-pristine \
 COPY docker/heal.php /var/www/heal.php
 RUN chown root:root /var/www/heal.php && chmod 0444 /var/www/heal.php
 
-# Kept outside /var/www/backend: nginx exposes that whole directory at /files/,
-# and this map must not be visible to the crawlers being measured.
+# Contents of the /files/ area nginx serves (docker/nginx.conf): the database
+# file and the API config folder, linked from the backend so they stay current.
+RUN mkdir -p /var/www/files/api \
+ && ln -s /var/www/backend/database.db /var/www/files/database.db \
+ && ln -s /var/www/backend/api/config /var/www/files/api/config
+
+# Kept outside /var/www/backend and /var/www/files: this map must not be
+# visible to the crawlers being measured.
 COPY crawler-coverage/ /var/www/crawler-coverage/
 
 # Owned by nginx (not www-data/php-fpm), and locked down to that owner only.
