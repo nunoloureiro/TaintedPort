@@ -200,10 +200,23 @@ function HostList({ hosts }) {
   );
 }
 
-function HowToUse({ headerLine, hasSession, hosts, canCopy, copied, onCopy }) {
+function HowToUse({ open, onToggle, headerLine, hasSession, hosts, canCopy, copied, onCopy }) {
   return (
     <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-8">
-      <h2 className="text-lg font-semibold text-white mb-4">How to use</h2>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls="coverage-how-to-use"
+        className="w-full flex items-center justify-between text-left"
+      >
+        <h2 className="text-lg font-semibold text-white">How to use</h2>
+        <span className={`text-zinc-400 text-sm transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
+          &#9660;
+        </span>
+      </button>
+      {open && (
+      <div id="coverage-how-to-use" className="mt-4">
       <ol className="space-y-4">
         <Step number={1}>
           Generate a UUID above, or use your own. It identifies your crawl session.
@@ -237,6 +250,8 @@ function HowToUse({ headerLine, hasSession, hosts, canCopy, copied, onCopy }) {
         succeeded whenever the page loads. Requests without the header are not recorded. Results
         are cleared whenever the application database is reset.
       </p>
+      </div>
+      )}
     </div>
   );
 }
@@ -251,6 +266,9 @@ export default function CoveragePage() {
   const [copied, setCopied] = useState(null);
   const [hosts, setHosts] = useState(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  // null until the load effect knows whether a session UUID was filled in:
+  // collapsed when one was (shared link or remembered), expanded when empty.
+  const [howToOpen, setHowToOpen] = useState(null);
 
   const loadResults = useCallback(async (id, { remember }) => {
     setInputError('');
@@ -287,6 +305,7 @@ export default function CoveragePage() {
         setSessionId(saved);
       }
     }
+    setHowToOpen(!(shared || UUID_PATTERN.test(readSessionCookie())));
     setCanCopy(Boolean(navigator.clipboard));
 
     const appOrigin = window.location.origin;
@@ -412,6 +431,8 @@ export default function CoveragePage() {
         </form>
 
         <HowToUse
+          open={howToOpen === true}
+          onToggle={() => setHowToOpen(o => !o)}
           headerLine={headerLine}
           hasSession={hasSession}
           hosts={hosts}
