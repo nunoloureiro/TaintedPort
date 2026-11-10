@@ -89,7 +89,7 @@ function parseVulnerabilities(raw) {
       inChainsTable = true;
       continue;
     }
-    if (currentTableContext === 'chains' && /^PATH\s+WAS\s+NAME/.test(line)) {
+    if (currentTableContext === 'chains' && /^PATH\s+NAME\s+STEPS/.test(line)) {
       inPathsTable = true;
       continue;
     }
@@ -120,23 +120,22 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    // Attack path row: id, former id, name, steps (execution order), severity.
+    // Attack path row: id, name, steps (execution order), severity.
     if (inPathsTable && line.trim()) {
-      const match = line.match(/^(CH-\d+\.\d+)\s+(CHAIN-\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(Critical|High|Medium|Low)\s*$/);
+      const match = line.match(/^(CH-\d+\.\d+)\s+(.+?)\s{2,}(.+?)\s{2,}(Critical|High|Medium|Low)\s*$/);
       if (match) {
         pathsTable.push({
           id: match[1],
-          was: match[2],
-          name: match[3].trim(),
-          members: match[4].trim(),
-          severity: match[5].trim(),
+          name: match[2].trim(),
+          members: match[3].trim(),
+          severity: match[4].trim(),
         });
       }
       continue;
     }
 
     if ((inSummaryTable || inBusinessTable || inAiTable || inDecoyTable) && line.trim()) {
-      const match = line.match(/^([A-Za-z]?\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+)\s+(.*)/);
+      const match = line.match(/^([A-Za-z]?\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+(?:\/\d+)*)\s+(.*)/);
       if (match) {
         const entry = {
           id: match[1],
@@ -158,16 +157,12 @@ function parseVulnerabilities(raw) {
     if (line.startsWith('DETAILED DESCRIPTIONS')) continue;
     if (line.startsWith('NOTE:') && currentTableContext === 'ai') continue;
 
-    // Attack path writeups: "CH-01.2 (was CHAIN-008): title". Retired paths
-    // keep their old heading: "CHAIN-004: title".
-    const pathMatch = line.match(/^(CH-\d+\.\d+) \(was (CHAIN-\d+)\):\s+(.+)/);
-    const retiredMatch = !pathMatch && line.match(/^(CHAIN-\d+):\s+(.+)/);
-    if (pathMatch || retiredMatch) {
+    // Attack path writeups: "CH-01.2: title".
+    const pathMatch = line.match(/^(CH-\d+\.\d+):\s+(.+)/);
+    if (pathMatch) {
       if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
       if (currentChain) chainSections.push(currentChain);
-      currentChain = pathMatch
-        ? { id: pathMatch[1], was: pathMatch[2], title: pathMatch[3].trim(), details: [] }
-        : { id: retiredMatch[1], title: retiredMatch[2].trim(), details: [] };
+      currentChain = { id: pathMatch[1], title: pathMatch[2].trim(), details: [] };
       continue;
     }
 
@@ -333,7 +328,7 @@ function SummaryRow({ vuln }) {
       <td className="px-4 py-3 text-zinc-400 text-xs font-mono">{vuln.location}</td>
       <td className="px-4 py-3">
         <a
-          href={`https://cwe.mitre.org/data/definitions/${vuln.cwe.replace('CWE-', '')}.html`}
+          href={`https://cwe.mitre.org/data/definitions/${vuln.cwe.replace('CWE-', '').split('/')[0]}.html`}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-cyan-400 hover:text-cyan-300 font-mono transition-colors"
@@ -405,7 +400,7 @@ function ChainGroupRows({ chain, paths, writeupIds }) {
       </tr>
       {paths.map(path => (
         <tr key={path.id} id={`path-${path.id}`} className="border-b border-dark-border/50 hover:bg-dark-lighter/30 transition-colors scroll-mt-20">
-          <td className="pl-8 pr-4 py-3 font-mono text-sm whitespace-nowrap" title={`was ${path.was}`}>
+          <td className="pl-8 pr-4 py-3 font-mono text-sm whitespace-nowrap">
             {writeupIds.has(path.id)
               ? <a href={`#chain-${path.id}`} className="text-accent-purple hover:underline">{path.id}</a>
               : <span className="text-zinc-400">{path.id}</span>}
@@ -483,7 +478,6 @@ function ChainDetail({ chain }) {
         </span>
         <h3 className="text-white font-semibold text-lg leading-tight">
           {chain.title}
-          {chain.was && <span className="ml-2 text-zinc-500 text-xs font-mono font-normal">(was {chain.was})</span>}
         </h3>
       </div>
 
