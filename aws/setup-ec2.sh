@@ -43,9 +43,12 @@ sudo docker tag "$DOCKER_IMAGE" taintedport:latest
 echo "[3/4] Starting TaintedPort..."
 sudo docker stop taintedport 2>/dev/null || true
 sudo docker rm taintedport 2>/dev/null || true
+# Run on a dedicated network, not the default bridge shared with other containers
+sudo docker network inspect taintedport-net >/dev/null 2>&1 || sudo docker network create taintedport-net
 sudo docker run -d \
     --name taintedport \
     --restart unless-stopped \
+    --network taintedport-net \
     -p 127.0.0.1:8080:80 \
     taintedport:latest
 

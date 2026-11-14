@@ -31,9 +31,11 @@ Deploy on EC2
 -------------
 sudo docker pull nunoloureiro/taintedport:latest
 sudo docker stop taintedport; sudo docker rm taintedport
+sudo docker network inspect taintedport-net >/dev/null 2>&1 || sudo docker network create taintedport-net
 sudo docker run -d \
     --name taintedport \
     --restart unless-stopped \
+    --network taintedport-net \
     -p 127.0.0.1:8080:80 \
     -e ADMIN_USER='<username>' \
     -e ADMIN_PASS='<strong-password>' \

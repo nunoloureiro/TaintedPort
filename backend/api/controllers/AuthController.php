@@ -178,6 +178,8 @@ class AuthController {
         // Convert totp_enabled and is_admin to boolean
         $user['totp_enabled'] = !empty($user['totp_enabled']) && $user['totp_enabled'] == 1;
         $user['is_admin'] = !empty($user['is_admin']) && $user['is_admin'] == 1;
+        $user['welcome_discount_available'] = empty($user['welcome_discount_used']);
+        unset($user['welcome_discount_used']);
 
         return [
             'success' => true,
@@ -224,8 +226,9 @@ class AuthController {
             'user' => $user
         ];
 
-        // Re-issue a token so a changed role takes effect immediately for the caller.
-        if (isset($data['role'])) {
+        // Re-issue a token so a changed role takes effect immediately for the
+        // caller. Only the caller's own session is re-issued.
+        if (isset($data['role']) && $targetUserId === intval($authUser['user_id'])) {
             $response['token'] = JWT::encode([
                 'user_id' => $targetUserId,
                 'email' => $user['email'],

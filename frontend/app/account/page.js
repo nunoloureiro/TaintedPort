@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { orderAPI, authAPI, giftcardAPI } from '@/lib/api';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
+import GiftCardPurchase from '@/components/GiftCardPurchase';
 import QRCode from 'qrcode';
 
 export default function AccountPage() {
@@ -55,8 +56,9 @@ export default function AccountPage() {
   const [disable2faError, setDisable2faError] = useState('');
 
   // Gift card / store credit state
-  const [welcomeCard, setWelcomeCard] = useState('');
-  const [claimingWelcome, setClaimingWelcome] = useState(false);
+  const [giftCards, setGiftCards] = useState([]);
+  const [denominations, setDenominations] = useState([]);
+  const [newGiftCardId, setNewGiftCardId] = useState(null);
   const [giftCardInput, setGiftCardInput] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [giftError, setGiftError] = useState('');
@@ -83,6 +85,20 @@ export default function AccountPage() {
       fetchOrders();
     }
   }, [user]);
+
+  const fetchGiftCards = useCallback(async () => {
+    try {
+      const res = await giftcardAPI.getAll();
+      setGiftCards(res.data.gift_cards || []);
+      setDenominations(res.data.denominations || []);
+    } catch (err) {
+      console.error('Failed to fetch gift cards:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) fetchGiftCards();
+  }, [user?.id, fetchGiftCards]);
 
   // Generate QR code whenever the otpauth URI changes
   const generateQr = useCallback(async (uri) => {
@@ -287,17 +303,9 @@ export default function AccountPage() {
     }
   };
 
-  const handleClaimWelcome = async () => {
-    setClaimingWelcome(true);
-    setGiftError('');
-    try {
-      const res = await giftcardAPI.welcome();
-      setWelcomeCard(res.data.gift_card);
-    } catch (err) {
-      setGiftError(err.response?.data?.message || 'Failed to claim welcome gift.');
-    } finally {
-      setClaimingWelcome(false);
-    }
+  const handleGiftCardPurchased = async (card) => {
+    setNewGiftCardId(card?.id ?? null);
+    await fetchGiftCards();
   };
 
   const handleRedeem = async () => {
@@ -310,7 +318,7 @@ export default function AccountPage() {
       const res = await giftcardAPI.redeem(code);
       setGiftSuccess(`€${Number(res.data.credited).toFixed(2)} added to your store credit.`);
       setGiftCardInput('');
-      await refreshUser();
+      await Promise.all([refreshUser(), fetchGiftCards()]);
     } catch (err) {
       setGiftError(err.response?.data?.message || 'Could not redeem this gift card.');
     } finally {
@@ -416,30 +424,57 @@ export default function AccountPage() {
               <p className="text-2xl font-bold gradient-text">€{Number(user.account_credit || 0).toFixed(2)}</p>
             </div>
 
-            {/* Welcome gift */}
-            <div className="pt-6 border-t border-dark-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white font-medium">Welcome Gift</p>
-                  <p className="text-zinc-500 text-sm">Claim your €5 welcome gift card.</p>
-                </div>
-                <Button variant="secondary" size="sm" onClick={handleClaimWelcome} loading={claimingWelcome}>
-                  Claim €5 Card
-                </Button>
+            {/* Welcome discount */}
+            {user.welcome_discount_available && (
+              <div className="pt-6 border-t border-dark-border">
+                <p className="text-white font-medium">Welcome Gift</p>
+                <p className="text-zinc-500 text-sm">€5 off your first order — applied automatically at checkout.</p>
               </div>
-              {welcomeCard && (
-                <div className="mt-4 p-4 bg-dark-lighter border border-dark-border rounded-lg">
-                  <p className="text-zinc-400 text-xs uppercase tracking-wider mb-2">Your gift card code</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-accent-cyan text-sm break-all select-all font-mono">{welcomeCard}</code>
-                    <button
-                      onClick={() => copyToClipboard(welcomeCard)}
-                      className="px-3 py-1.5 text-xs bg-dark-card border border-dark-border rounded-lg text-zinc-300 hover:text-white transition-colors flex-shrink-0"
+            )}
+
+            {/* Buy */}
+            <div className="pt-6 border-t border-dark-border">
+              <GiftCardPurchase denominations={denominations} onPurchased={handleGiftCardPurchased} />
+            </div>
+
+            {/* My gift cards */}
+            <div className="pt-6 border-t border-dark-border">
+              <p className="text-white font-medium mb-1">My Gift Cards</p>
+              <p className="text-zinc-500 text-sm mb-3">Share a code with someone, or redeem it yourself below.</p>
+              {giftCards.length === 0 ? (
+                <p className="text-zinc-600 text-sm">You don&rsquo;t have any gift cards yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {giftCards.map((card) => (
+                    <div
+                      key={card.id}
+                      className={`p-4 bg-dark-lighter border rounded-lg ${card.id === newGiftCardId ? 'border-accent-cyan/40' : 'border-dark-border'}`}
                     >
-                      Copy
-                    </button>
-                  </div>
-                  <p className="text-zinc-600 text-xs mt-2">Paste it into &ldquo;Redeem a Gift Card&rdquo; below to add €5 to your balance.</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-semibold">€{Number(card.amount).toFixed(2)}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full border text-zinc-400 border-dark-border">
+                            {card.source === 'admin' ? 'From the shop' : 'Purchased'}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${card.redeemed ? 'text-zinc-500 border-dark-border' : 'text-green-400 border-green-500/30 bg-green-500/10'}`}>
+                            {card.redeemed ? 'Redeemed' : 'Not redeemed'}
+                          </span>
+                        </div>
+                        {card.created_at && (
+                          <span className="text-zinc-600 text-xs">{new Date(card.created_at).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-accent-cyan text-sm break-all select-all font-mono">{card.token}</code>
+                        <button
+                          onClick={() => copyToClipboard(card.token)}
+                          className="px-3 py-1.5 text-xs bg-dark-card border border-dark-border rounded-lg text-zinc-300 hover:text-white transition-colors flex-shrink-0"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

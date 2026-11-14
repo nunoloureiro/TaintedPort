@@ -35,7 +35,7 @@ class PaymentController {
             return ['success' => false, 'message' => 'No card payment is required for this order.', 'amount' => 0];
         }
 
-        $res = StripeClient::createPaymentIntent($amount, 'eur', ['user_id' => (string) $authUser['user_id']]);
+        $res = StripeClient::createPaymentIntent($amount, 'eur', ['user_id' => (string) $authUser['user_id'], 'kind' => 'order']);
         if ($res['status'] >= 400 || empty($res['data']['client_secret'])) {
             http_response_code(502);
             return [

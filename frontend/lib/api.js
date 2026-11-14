@@ -66,7 +66,9 @@ export const orderAPI = {
 
 // Gift card API
 export const giftcardAPI = {
-  welcome: () => api.get('/giftcards/welcome'),
+  getAll: () => api.get('/giftcards'),
+  createPurchaseIntent: (amount) => api.post('/giftcards/purchase-intent', { amount }),
+  purchase: (paymentIntentId) => api.post('/giftcards/purchase', { payment_intent_id: paymentIntentId }),
   redeem: (giftCard) => api.post('/giftcards/redeem', { gift_card: giftCard }),
 };
 
@@ -100,6 +102,10 @@ export const adminAPI = {
   createDiscount: (data) => api.post('/admin/discounts', data),
   updateDiscount: (id, data) => api.put(`/admin/discounts/${id}`, data),
   deleteDiscount: (id) => api.delete(`/admin/discounts/${id}`),
+
+  // Gift cards
+  getGiftCards: () => api.get('/admin/giftcards'),
+  issueGiftCard: (userId, amount) => api.post('/admin/giftcards', { user_id: userId, amount }),
 
   // Referral codes
   getReferrals: () => api.get('/admin/referrals'),

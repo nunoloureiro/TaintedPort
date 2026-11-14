@@ -172,23 +172,29 @@ try {
         $response = $ctrl->remove($authUser, $matches[1]);
     }
     // Gift card routes (protected)
-    elseif ($path === '/giftcards/welcome' && $method === 'GET') {
-        CoverageRecorder::mark(18);
+    elseif ($path === '/giftcards' && $method === 'GET') {
+        CoverageRecorder::mark(108);
         $authUser = authenticateToken();
         $ctrl = new GiftCardController();
-        $response = $ctrl->welcome($authUser);
+        $response = $ctrl->mine($authUser);
+    }
+    elseif ($path === '/giftcards/purchase-intent' && $method === 'POST') {
+        CoverageRecorder::mark(109);
+        $authUser = authenticateToken();
+        $ctrl = new GiftCardController();
+        $response = $ctrl->purchaseIntent($authUser);
+    }
+    elseif ($path === '/giftcards/purchase' && $method === 'POST') {
+        CoverageRecorder::mark(110);
+        $authUser = authenticateToken();
+        $ctrl = new GiftCardController();
+        $response = $ctrl->purchase($authUser);
     }
     elseif ($path === '/giftcards/redeem' && $method === 'POST') {
         CoverageRecorder::mark(19);
         $authUser = authenticateToken();
         $ctrl = new GiftCardController();
         $response = $ctrl->redeem($authUser);
-    }
-    elseif ($path === '/vouchers/promo' && $method === 'GET') {
-        CoverageRecorder::mark(99);
-        $authUser = authenticateToken();
-        $ctrl = new VoucherController();
-        $response = $ctrl->promo($authUser);
     }
     elseif ($path === '/vouchers/redeem' && $method === 'POST') {
         CoverageRecorder::mark(100);
@@ -480,6 +486,19 @@ try {
         $authUser = authenticateToken();
         $ctrl = new AdminController();
         $response = $ctrl->updateUserRole($authUser, $matches[1]);
+    }
+    // Admin: gift cards
+    elseif ($path === '/admin/giftcards' && $method === 'GET') {
+        CoverageRecorder::mark(111);
+        $authUser = authenticateToken();
+        $ctrl = new GiftCardController();
+        $response = $ctrl->adminIndex($authUser);
+    }
+    elseif ($path === '/admin/giftcards' && $method === 'POST') {
+        CoverageRecorder::mark(112);
+        $authUser = authenticateToken();
+        $ctrl = new GiftCardController();
+        $response = $ctrl->adminIssue($authUser);
     }
     // Admin: discount codes
     elseif ($path === '/admin/discounts' && $method === 'GET') {

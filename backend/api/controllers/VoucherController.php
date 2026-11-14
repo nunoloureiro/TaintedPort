@@ -11,32 +11,6 @@ class VoucherController {
         $this->user = new User();
     }
 
-    /** Issue a standard promo voucher (store credit) to the current user. */
-    public function promo($authUser) {
-        // One promo voucher per account. The conditional UPDATE flips the flag
-        // atomically, so it also settles two simultaneous claims (only one wins).
-        $db = Database::getInstance();
-        $stmt = $db->prepare(
-            'UPDATE users SET promo_voucher_claimed = 1
-             WHERE id = :id AND promo_voucher_claimed = 0'
-        );
-        $stmt->bindValue(':id', $authUser['user_id'], SQLITE3_INTEGER);
-        $stmt->execute();
-        if ($db->changes() === 0) {
-            http_response_code(409);
-            return ['success' => false, 'message' => 'You have already claimed your promo voucher.'];
-        }
-
-        $code = 'PROMO-' . strtoupper(bin2hex(random_bytes(4)));
-        $token = Voucher::issue($code, 10.00);
-        return [
-            'success' => true,
-            'voucher' => $token,
-            'amount' => 10.00,
-            'message' => 'Promo voucher issued. Redeem it for store credit.',
-        ];
-    }
-
     /** Convert the caller's store credit into a transferable signed voucher. */
     public function cashout($authUser) {
         $userId = $authUser['user_id'];

@@ -5,6 +5,9 @@ require_once __DIR__ . '/Wine.php';
 require_once __DIR__ . '/User.php';
 
 class Order {
+    /** New customers get this much off their first order. */
+    const WELCOME_DISCOUNT = 5.00;
+
     private $db;
 
     public function __construct() {
@@ -27,6 +30,9 @@ class Order {
             $total = $total * (1 - ($discountPercent / 100));
             if ($total < 0) $total = 0;
         }
+        if ($total > 0 && $this->welcomeDiscountAvailable($userId)) {
+            $total = round($total - min(self::WELCOME_DISCOUNT, $total), 2);
+        }
         $userModel = new User();
         $credit = $userModel->getCredit($userId);
         if ($credit > 0 && $total > 0) {
@@ -34,6 +40,23 @@ class Order {
         }
         $grand = round($total * 1.23, 2); // VAT-inclusive, mirrors the UI total
         return (int) round($grand * 100);
+    }
+
+    private function welcomeDiscountAvailable($userId) {
+        $stmt = $this->db->prepare('SELECT welcome_discount_used FROM users WHERE id = :id');
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $row = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
+        return $row && empty($row['welcome_discount_used']);
+    }
+
+    /** Mark the welcome discount as used; true if this call claimed it. */
+    private function claimWelcomeDiscount($userId) {
+        $stmt = $this->db->prepare(
+            'UPDATE users SET welcome_discount_used = 1 WHERE id = :id AND welcome_discount_used = 0'
+        );
+        $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
+        return $this->db->changes() > 0;
     }
 
     /** True if some order already consumed this Stripe PaymentIntent. */
@@ -101,6 +124,11 @@ class Order {
         if ($discountPercent > 0) {
             $total = $total * (1 - ($discountPercent / 100));
             if ($total < 0) $total = 0;
+        }
+
+        // First order only: the welcome discount comes off before store credit.
+        if ($total > 0 && $this->claimWelcomeDiscount($userId)) {
+            $total = round($total - min(self::WELCOME_DISCOUNT, $total), 2);
         }
 
         // Apply the buyer's store credit toward the order total.

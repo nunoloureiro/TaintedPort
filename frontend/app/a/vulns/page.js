@@ -29,6 +29,7 @@ function parseVulnerabilities(raw) {
   let currentChain = null;
   let summaryTable = [];
   let businessTable = [];
+  let advancedTable = [];
   let aiTable = [];
   let decoyTable = [];
   let chainsTable = [];
@@ -37,6 +38,7 @@ function parseVulnerabilities(raw) {
   let inNotes = false;
   let inSummaryTable = false;
   let inBusinessTable = false;
+  let inAdvancedTable = false;
   let inAiTable = false;
   let inDecoyTable = false;
   let inChainsTable = false;
@@ -62,6 +64,10 @@ function parseVulnerabilities(raw) {
       currentTableContext = 'business';
       continue;
     }
+    if (line.startsWith('ADVANCED TECHNICAL VULNERABILITIES')) {
+      currentTableContext = 'advanced';
+      continue;
+    }
     if (line.startsWith('CHAINED VULNERABILITIES')) {
       currentTableContext = 'chains';
       if (currentVuln) { sections.push(currentVuln); currentVuln = null; }
@@ -80,6 +86,7 @@ function parseVulnerabilities(raw) {
 
     if (line.startsWith('#') && (line.includes('VULNERABILITY') || line.includes('DECOY')) && line.includes('LOCATION')) {
       if (currentTableContext === 'business') inBusinessTable = true;
+      else if (currentTableContext === 'advanced') inAdvancedTable = true;
       else if (currentTableContext === 'ai') inAiTable = true;
       else if (currentTableContext === 'decoy') inDecoyTable = true;
       else inSummaryTable = true;
@@ -93,12 +100,13 @@ function parseVulnerabilities(raw) {
       inPathsTable = true;
       continue;
     }
-    const inAnyTable = inSummaryTable || inBusinessTable || inAiTable || inDecoyTable || inChainsTable || inPathsTable;
+    const inAnyTable = inSummaryTable || inBusinessTable || inAdvancedTable || inAiTable || inDecoyTable || inChainsTable || inPathsTable;
     if (line.startsWith('--') && line.includes('---') && inAnyTable) continue;
 
     if (inAnyTable && line.trim() === '') {
       inSummaryTable = false;
       inBusinessTable = false;
+      inAdvancedTable = false;
       inAiTable = false;
       inDecoyTable = false;
       inChainsTable = false;
@@ -134,7 +142,7 @@ function parseVulnerabilities(raw) {
       continue;
     }
 
-    if ((inSummaryTable || inBusinessTable || inAiTable || inDecoyTable) && line.trim()) {
+    if ((inSummaryTable || inBusinessTable || inAdvancedTable || inAiTable || inDecoyTable) && line.trim()) {
       const match = line.match(/^([A-Za-z]?\d+\w?)\s+(.+?)\s{2,}(.+?)\s{2,}(CWE-\d+(?:\/\d+)*)\s+(.*)/);
       if (match) {
         const entry = {
@@ -145,6 +153,7 @@ function parseVulnerabilities(raw) {
           severity: match[5].trim(),
         };
         if (inBusinessTable) businessTable.push(entry);
+        else if (inAdvancedTable) advancedTable.push(entry);
         else if (inAiTable) aiTable.push(entry);
         else if (inDecoyTable) decoyTable.push(entry);
         else summaryTable.push(entry);
@@ -200,7 +209,7 @@ function parseVulnerabilities(raw) {
     chain.severity = ranked[0] || '';
   }
 
-  return { summaryTable, businessTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines };
+  return { summaryTable, businessTable, advancedTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines };
 }
 
 function VulnDetail({ detail }) {
@@ -570,16 +579,18 @@ export default function VulnsPage() {
     );
   }
 
-  const { summaryTable, businessTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
+  const { summaryTable, businessTable, advancedTable, aiTable, decoyTable, chainsTable, pathsTable, sections, chainSections, notesLines } = parseVulnerabilities(raw);
   const writeupIds = new Set(chainSections.map(c => c.id));
 
   const commodityIds = new Set(summaryTable.map(v => v.id));
   const businessIds = new Set(businessTable.map(v => v.id));
+  const advancedIds = new Set(advancedTable.map(v => v.id));
   const aiIds = new Set(aiTable.map(v => v.id));
   const decoyIds = new Set(decoyTable.map(v => v.id));
 
   const commodityVulns = sections.filter(s => commodityIds.has(s.id));
   const businessVulns = sections.filter(s => businessIds.has(s.id));
+  const advancedVulns = sections.filter(s => advancedIds.has(s.id));
   const aiVulns = sections.filter(s => aiIds.has(s.id));
   const decoyVulns = sections.filter(s => decoyIds.has(s.id));
 
@@ -589,6 +600,7 @@ export default function VulnsPage() {
   // the lists alone, and it avoids re-deriving the detail arrays too.
   const filteredCommodityTable = summaryTable.filter(v => matchesFilter(v.severity));
   const filteredBusinessTable = businessTable.filter(v => matchesFilter(v.severity));
+  const filteredAdvancedTable = advancedTable.filter(v => matchesFilter(v.severity));
   const filteredChainsTable = chainsTable.filter(c => matchesFilter(c.severity));
 
   return (
@@ -609,13 +621,14 @@ export default function VulnsPage() {
         </div>
 
         {/* Counts by type — reflects the severity filter below (AI traps excluded, always shown in full) */}
-        <div className="max-w-lg mx-auto mb-6">
+        <div className="max-w-2xl mx-auto mb-6">
           <div className="bg-dark-card border border-dark-border rounded-xl flex divide-x divide-dark-border/50">
             {[
               ['Commodity', filteredCommodityTable.length],
+              ['Advanced Technical', filteredAdvancedTable.length],
               ['Business Logic', filteredBusinessTable.length],
               ['Chains', filteredChainsTable.length],
-              ['Total', filteredCommodityTable.length + filteredBusinessTable.length + filteredChainsTable.length, true],
+              ['Total', filteredCommodityTable.length + filteredAdvancedTable.length + filteredBusinessTable.length + filteredChainsTable.length, true],
             ].map(([label, count, isTotal]) => (
               <div
                 key={label}
@@ -676,6 +689,38 @@ export default function VulnsPage() {
               </div>
             ) : (
               <p className="text-zinc-500 text-sm">No commodity vulnerabilities match the selected severities.</p>
+            )}
+          </div>
+        )}
+
+        {/* Advanced Technical Summary Table */}
+        {advancedTable.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">&#9632;</span> Advanced Technical Vulnerabilities
+              <span className="text-zinc-500 text-sm font-normal">({filteredAdvancedTable.length})</span>
+            </h2>
+            {filteredAdvancedTable.length > 0 ? (
+              <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-dark-border bg-dark-lighter/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Vulnerability</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Location</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">CWE</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Severity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAdvancedTable.map(v => <SummaryRow key={v.id} vuln={v} />)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="text-zinc-500 text-sm">No advanced technical vulnerabilities match the selected severities.</p>
             )}
           </div>
         )}
@@ -801,6 +846,18 @@ export default function VulnsPage() {
             </h2>
             <div className="grid gap-4">
               {commodityVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Advanced Technical Details */}
+        {advancedVulns.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-yellow-400">&#9632;</span> Advanced Technical Details
+            </h2>
+            <div className="grid gap-4">
+              {advancedVulns.map(v => <VulnDetail key={v.id} detail={v} />)}
             </div>
           </div>
         )}

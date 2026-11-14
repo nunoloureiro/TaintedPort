@@ -10,6 +10,7 @@ const TABS = [
   { href: '/admin/orders', label: 'Orders', roles: ['admin', 'support'] },
   { href: '/admin/wines', label: 'Wines', roles: ['admin'] },
   { href: '/admin/discounts', label: 'Discounts & Referrals', roles: ['admin'] },
+  { href: '/admin/giftcards', label: 'Gift Cards', roles: ['admin'] },
   { href: '/admin/support', label: 'Support', roles: ['admin', 'support'] },
   { href: '/admin/team', label: 'Team', roles: ['admin'] },
 ];

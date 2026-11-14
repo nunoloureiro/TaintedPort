@@ -26,8 +26,7 @@ CREATE TABLE users (
     reset_token_issued_at INTEGER DEFAULT NULL,
     account_credit REAL DEFAULT 0,
     company TEXT NOT NULL DEFAULT \'\',
-    welcome_gift_claimed INTEGER DEFAULT 0,
-    promo_voucher_claimed INTEGER DEFAULT 0,
+    welcome_discount_used INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -158,6 +157,19 @@ CREATE TABLE support_messages (
     message TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (ticket_id) REFERENCES support_tickets(id)
+);
+
+CREATE TABLE gift_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id TEXT UNIQUE NOT NULL,
+    token TEXT NOT NULL,
+    amount REAL NOT NULL,
+    owner_user_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    payment_intent_id TEXT UNIQUE,
+    issued_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE redeemed_gift_cards (

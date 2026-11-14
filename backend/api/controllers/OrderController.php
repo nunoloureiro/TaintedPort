@@ -162,6 +162,7 @@ class OrderController {
             $ok = $pi['status'] < 400
                 && isset($p['status']) && $p['status'] === 'succeeded'
                 && (string)(isset($p['metadata']['user_id']) ? $p['metadata']['user_id'] : '') === (string)$authUser['user_id']
+                && (isset($p['metadata']['kind']) ? $p['metadata']['kind'] : 'order') === 'order'
                 && intval(isset($p['amount']) ? $p['amount'] : 0) >= $expected;
             if (!$ok) {
                 http_response_code(402);

@@ -3,31 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { orderAPI, discountAPI, paymentAPI } from '@/lib/api';
+import { stripePromise, stripeAppearance } from '@/lib/stripe';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
-
-const STRIPE_PK =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
-  'pk_test_51UFzKeFjrKiRZbyXSpCq8zcBCi5ipwMX9pTVxFZdJ218xvv1YPypyyklo1vCd4hnECpsnot8fbXUN5V8gTvYoRzx008xoUNp7J';
-// developerTools.assistant: 'never' suppresses Stripe.js's floating dev-tools
-// widget that otherwise appears in test/sandbox mode.
-const stripePromise = loadStripe(STRIPE_PK, { developerTools: { assistant: { enabled: false } } });
-
-const stripeAppearance = {
-  theme: 'night',
-  variables: {
-    colorPrimary: '#a855f7',
-    colorBackground: '#18181b',
-    colorText: '#e4e4e7',
-    borderRadius: '8px',
-    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-  },
-};
 
 // Card form — lives inside <Elements> so it can use the Stripe hooks.
 function PaymentForm({ grandTotal, onPay, validate }) {
@@ -76,7 +58,7 @@ function PaymentForm({ grandTotal, onPay, validate }) {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const { items, total, clearCart } = useCart();
   const [form, setForm] = useState({
     name: '',
@@ -114,8 +96,10 @@ export default function CheckoutPage() {
 
   const storeCredit = Number(user?.account_credit || 0);
   const discountedSubtotal = appliedDiscount ? Math.max(0, total - appliedDiscount.discount_amount) : total;
-  const appliedCredit = Math.min(storeCredit, discountedSubtotal);
-  const netSubtotal = Math.max(0, discountedSubtotal - appliedCredit);
+  const welcomeDiscount = user?.welcome_discount_available ? Math.min(5, discountedSubtotal) : 0;
+  const afterWelcome = Math.max(0, discountedSubtotal - welcomeDiscount);
+  const appliedCredit = Math.min(storeCredit, afterWelcome);
+  const netSubtotal = Math.max(0, afterWelcome - appliedCredit);
   const vat = netSubtotal * 0.23;
   const grandTotal = netSubtotal + vat;
   // When card payments aren't configured, only cash is offered.
@@ -214,6 +198,7 @@ export default function CheckoutPage() {
       const res = await orderAPI.create(payload);
       setSuccess(res.data.order_id);
       clearCart();
+      refreshUser();
       return true;
     } catch (err) {
       setErrors({ server: err.response?.data?.message || 'Failed to place order. Please try again.' });
@@ -343,7 +328,7 @@ export default function CheckoutPage() {
               {grandTotal <= 0 ? (
                 <>
                   <p className="text-zinc-400 text-sm mb-5">
-                    Your store credit covers this order in full — no payment required.
+                    Your discounts and store credit cover this order in full — no payment required.
                   </p>
                   <Button onClick={() => handlePlaceOrder(null)} loading={loading} className="w-full" size="lg">
                     Place Order
@@ -466,6 +451,12 @@ export default function CheckoutPage() {
                   <div className="flex justify-between text-green-400 text-sm">
                     <span>Discount</span>
                     <span>-€{appliedDiscount.discount_amount.toFixed(2)}</span>
+                  </div>
+                )}
+                {welcomeDiscount > 0 && (
+                  <div className="flex justify-between text-green-400 text-sm">
+                    <span>Welcome discount</span>
+                    <span>-€{welcomeDiscount.toFixed(2)}</span>
                   </div>
                 )}
                 {appliedCredit > 0 && (
