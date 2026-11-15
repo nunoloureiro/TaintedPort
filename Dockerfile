@@ -50,7 +50,7 @@ RUN npm run build
 FROM hashicorp/consul:1.22.7@sha256:a230dcea0bb107bd7958a912d1429fb7f9d399637de7ffb814b34412b9e8c543 AS consul
 
 # --- Stage 3: Final runtime image ---
-FROM php:8.2.35-fpm-alpine3.24
+FROM php:8.6.0RC5-fpm-alpine3.24
 
 # Re-declared here (see stage 1) so entrypoint.sh can log the running
 # version at container start — the only way to confirm a redeploy actually
