@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.10.0",
-    "@stripe/stripe-js": "^9.16.0",
+    "@stripe/stripe-js": "^9.17.0",
     "autoprefixer": "^10.4.24",
     "axios": "^1.13.5",
     "jspdf": "^4.2.1",
